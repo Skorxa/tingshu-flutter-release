@@ -33,7 +33,7 @@ Future<void> main() async {
     builder: () => PlayerAudioHandler(),
     config: const AudioServiceConfig(
       androidNotificationChannelId: 'com.tingshu.audio',
-      androidNotificationChannelName: '聚合听书',
+      androidNotificationChannelName: '橘听',
       androidNotificationOngoing: true,
       androidStopForegroundOnPause: true,
     ),
@@ -102,7 +102,7 @@ class TingshuApp extends StatelessWidget {
         ThemeService.instance,
       ]),
       builder: (context, _) => MaterialApp(
-        title: '聚合听书',
+        title: '橘听',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           colorScheme: ThemeService.instance.light,

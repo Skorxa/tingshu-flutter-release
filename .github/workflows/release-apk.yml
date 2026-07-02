@@ -160,13 +160,13 @@ jobs:
               --clobber
             gh release edit "${{ steps.version.outputs.tag }}" \
               --repo Skorxa/tingshu-flutter-release \
-              --title "聚合听书 ${{ steps.version.outputs.version_name }}" \
+              --title "橘听 ${{ steps.version.outputs.version_name }}" \
               --notes "${{ steps.version.outputs.changelog }}"
           else
             gh release create "${{ steps.version.outputs.tag }}" \
               "release/${{ steps.package.outputs.apk_name }}" \
               "release/version.json" \
               --repo Skorxa/tingshu-flutter-release \
-              --title "聚合听书 ${{ steps.version.outputs.version_name }}" \
+              --title "橘听 ${{ steps.version.outputs.version_name }}" \
               --notes "${{ steps.version.outputs.changelog }}"
           fi
