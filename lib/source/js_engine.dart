@@ -11,24 +11,48 @@ class JsEngine {
   JsEngine._();
   static final JsEngine instance = JsEngine._();
 
-  late final JavascriptRuntime _rt;
+  JavascriptRuntime? _rt;
   final Dio _dio = Dio();
   final Map<int, Completer<dynamic>> _pending = {};
   int _reqSeq = 0;
   Timer? _pump;
   bool _ready = false;
+  Future<void>? _initFuture;
+
+  JavascriptRuntime get _runtime {
+    final rt = _rt;
+    if (rt == null) {
+      throw StateError('JS 引擎尚未初始化');
+    }
+    return rt;
+  }
 
   Future<void> init() async {
     if (_ready) return;
-    _rt = getJavascriptRuntime();
-    final shim = await rootBundle.loadString('assets/js/uni_shim.js');
-    final r = _rt.evaluate(shim);
-    if (r.isError) {
-      throw Exception('uni 垫片加载失败: ${r.stringResult}');
+    final inflight = _initFuture;
+    if (inflight != null) {
+      await inflight;
+      return;
     }
-    _rt.onMessage('http', _handleHttp);
-    _rt.onMessage('result', _handleResult);
-    _ready = true;
+    final completer = Completer<void>();
+    _initFuture = completer.future;
+    try {
+      final rt = getJavascriptRuntime();
+      final shim = await rootBundle.loadString('assets/js/uni_shim.js');
+      final r = rt.evaluate(shim);
+      if (r.isError) {
+        throw Exception('uni 垫片加载失败: ${r.stringResult}');
+      }
+      rt.onMessage('http', _handleHttp);
+      rt.onMessage('result', _handleResult);
+      _rt = rt;
+      _ready = true;
+      completer.complete();
+    } catch (e, stack) {
+      _initFuture = null;
+      completer.completeError(e, stack);
+      rethrow;
+    }
   }
 
   // 仅在有未完成调用时驱动 QuickJS 微任务队列(推进 Promise 链),
@@ -37,7 +61,7 @@ class JsEngine {
     if (_pending.isEmpty) return;
     _pump ??= Timer.periodic(const Duration(milliseconds: 50), (_) {
       try {
-        while (_rt.executePendingJob() > 0) {}
+        while (_runtime.executePendingJob() > 0) {}
       } catch (_) {}
       if (_pending.isEmpty) _stopPump();
     });
@@ -107,9 +131,9 @@ class JsEngine {
         'header': resp.headers.map,
         'data': parsed,
       });
-      _rt.evaluate('__httpResolve($id, ${jsonEncode(env)})');
+      _runtime.evaluate('__httpResolve($id, ${jsonEncode(env)})');
     } catch (e) {
-      _rt.evaluate('__httpReject($id, ${jsonEncode(e.toString())})');
+      _runtime.evaluate('__httpReject($id, ${jsonEncode(e.toString())})');
     }
   }
 
@@ -129,7 +153,7 @@ class JsEngine {
   /// 编译并注册一个音源,返回 {id, name}
   Future<Map<String, dynamic>> loadSource(String code) async {
     await init();
-    final res = _rt.evaluate('__loadSource(${jsonEncode(code)})');
+    final res = _runtime.evaluate('__loadSource(${jsonEncode(code)})');
     if (res.isError) {
       throw Exception('音源解析失败: ${res.stringResult}');
     }
@@ -149,7 +173,7 @@ class JsEngine {
     Map<String, dynamic> config,
   ) async {
     await init();
-    final r = _rt.evaluate(
+    final r = _runtime.evaluate(
       '__setSourceConfig(${jsonEncode(sourceId)}, ${jsonEncode(jsonEncode(config))})',
     );
     if (r.isError) {
@@ -169,7 +193,7 @@ class JsEngine {
     final c = Completer<dynamic>();
     _pending[reqId] = c;
     final argsJson = jsonEncode(args);
-    final r = _rt.evaluate(
+    final r = _runtime.evaluate(
       '__call($reqId, ${jsonEncode(sourceId)}, ${jsonEncode(method)}, ${jsonEncode(argsJson)})',
     );
     if (r.isError) {

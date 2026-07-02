@@ -1,5 +1,9 @@
-// 听优有声（tingyou.fm）Worker 源
-// 接口: tingyou/search?key= / tingyou/toc?id=  |  鉴权: 无  |  分页: 搜索有 page,目录不分页
+// 听优有声（tingyou.fm）HTML + 嗅探源
+// 接口:
+//   search        GET /search/result?keyword=&page=     → SSR HTML, 解析 .list-item
+//   getChapters   GET /audios/{albumId}/1                → 解析章节页 __NUXT_DATA__（明文全量章节）
+//   getAudioUrl   返回 sniff 指令, App 用内置 WebView 打开播放页, 抓 file.hgeuz.cn/stream 直链
+// 鉴权: 无 | 站点为 Nuxt SSR, 数据接口(album_chapters)是加密 payload, 故走页面解析 + 嗅探
 ({
   name: '听优有声',
   id: 'tingyou',
@@ -7,20 +11,17 @@
   _base: 'https://tingyou.fm',
   _ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
 
-  // ── 公共请求: 包成 Promise, 统一判状态码 ──
-  _get(path, params) {
-    const qs = Object.entries(params)
-      .map(([k, v]) => k + '=' + encodeURIComponent(v))
-      .join('&')
-    const url = this._base + path + (qs ? '?' + qs : '')
+  // ── 公共 GET, 统一判状态码, 返回 HTML 文本 ──
+  _get(path) {
+    const url = this._base + path
     return new Promise((resolve, reject) => {
       uni.request({
         url,
         method: 'GET',
-        header: { 'User-Agent': this._ua },
-        timeout: 15000,
-        success: r => r.statusCode === 200
-          ? resolve(r.data)
+        header: { 'User-Agent': this._ua, Referer: this._base + '/' },
+        timeout: 20000,
+        success: r => (r.statusCode >= 200 && r.statusCode < 300)
+          ? resolve(String(r.data || ''))
           : reject(new Error('HTTP ' + r.statusCode + ' | ' + url)),
         fail: e => reject(new Error(e.errMsg || '网络失败')),
       })
@@ -41,96 +42,92 @@
       .trim()
   },
 
-  _attr(tag, name) {
-    const re = new RegExp(name + "\\s*=\\s*(\"([^\"]*)\"|'([^']*)'|([^\\s>]+))", 'i')
-    const m = String(tag || '').match(re)
-    return m ? this._clean(m[2] || m[3] || m[4] || '') : ''
+  // ── 抽取页面里的 __NUXT_DATA__ JSON 数组（devalue 扁平数组）──
+  _nuxtData(html) {
+    const m = String(html).match(/<script[^>]*id="__NUXT_DATA__"[^>]*>([\s\S]*?)<\/script>/)
+    if (!m) throw new Error('未找到 __NUXT_DATA__（页面结构可能已变）')
+    try {
+      return JSON.parse(m[1])
+    } catch (e) {
+      throw new Error('解析 __NUXT_DATA__ 失败: ' + String(e).slice(0, 120))
+    }
   },
 
-  _firstMatch(html, re) {
-    const m = String(html || '').match(re)
-    return m ? (m[1] || '') : ''
-  },
-
-  _abs(url, base) {
-    url = String(url || '').trim()
-    if (!url) return ''
-    if (url.startsWith('//')) return 'https:' + url
-    if (/^https?:\/\//i.test(url)) return url
-    if (url[0] === '/') return this._base + url
-    const b = String(base || this._base + '/').replace(/[#?].*$/, '').replace(/\/[^/]*$/, '/')
-    return b + url
-  },
-
-  // ── search: 调用 tingyou/search?key=&page= ──
-  // 返回 JSON: { code:0, data:[ { id, name, pic, author, cate, count }, ... ], pages? }
+  // ── search: /search/result?keyword=&page= ，解析 <a class="list-item"> 列表 ──
   async search(keyword, page = 1, pageSize = 20) {
     pageSize = pageSize || 20
-    const res = await this._get('/tingyou/search', { key: keyword, page })
-    // res.data 可能已是对象,也可能是字符串
-    let data = res
-    if (typeof data === 'string') {
-      try { data = JSON.parse(data) } catch (e) {
-        throw new Error('搜索接口返回非 JSON: ' + String(data).slice(0, 200))
-      }
+    const html = await this._get('/search/result?keyword=' + encodeURIComponent(keyword) + '&page=' + page)
+    const list = []
+    // 每个结果: <a href="/albums/{id}" class="list-item" ...> ... <p class="title">..</p> <p class="desc">..</p> <span class="text">N 期</span> </a>
+    const re = /<a\s+href="\/albums\/(\d+)"[^>]*class="list-item"[^>]*>([\s\S]*?)<\/a>/g
+    let m
+    while ((m = re.exec(html)) !== null) {
+      const bookId = m[1]
+      const block = m[2]
+      const title = this._clean((block.match(/<p[^>]*class="title"[^>]*>([\s\S]*?)<\/p>/) || [])[1] || '')
+        || this._clean((block.match(/<img[^>]*\balt="([^"]*)"/) || [])[1] || '')
+      if (!bookId || !title) continue
+      const desc = this._clean((block.match(/<p[^>]*class="desc"[^>]*>([\s\S]*?)<\/p>/) || [])[1] || '')
+      const count = this._clean((block.match(/<span[^>]*class="text"[^>]*>([\s\S]*?)<\/span>/) || [])[1] || '')
+      list.push({
+        bookId,
+        title,
+        cover: '',                                   // 列表页封面为懒加载, 无 src; 进目录后由 getChapters 补
+        author: '',
+        intro: [count, desc].filter(Boolean).join(' · '),
+      })
     }
-    if (data.code && data.code !== 0) {
-      throw new Error('搜索接口返回错误: code=' + data.code + ' msg=' + (data.msg || ''))
-    }
-    const rows = Array.isArray(data.data) ? data.data : []
-    const total = parseInt(data.total || data.count || 0)
-    const maxPage = Math.max(1, Math.ceil(total / pageSize))
-    return {
-      list: rows.map(it => ({
-        bookId:  String(it.id),
-        title:   String(it.name || it.title || '').trim(),
-        cover:   String(it.pic  || it.cover || '').trim(),
-        author:  String(it.author || ''),
-        intro:   (it.cate || '') + ' · ' + (it.count || 0) + '集',
-      })),
-      page,
-      maxPage,
-      hasMore: page < maxPage,
-    }
+    // 搜不到返回空 list, 不抛错
+    return { list: list.slice(0, pageSize), page, maxPage: 1, hasMore: false }
   },
 
-  // ── getChapters: 调用 tingyou/toc?id=, 返回完整章节 JSON 数组 ──
-  // 返回: { code:0, data:[ { id, name }, ... ], info:{ name, pic, author } }
+  // ── getChapters: bookId 即 albumId。请求任一章节页, 从 __NUXT_DATA__ 还原全量章节 ──
   async getChapters(bookId, page = 1, pageSize = 200) {
     pageSize = pageSize || 200
-    const res = await this._get('/tingyou/toc', { id: bookId })
-    let data = res
-    if (typeof data === 'string') {
-      try { data = JSON.parse(data) } catch (e) {
-        throw new Error('目录接口返回非 JSON: ' + String(data).slice(0, 200))
+    const html = await this._get('/audios/' + encodeURIComponent(bookId) + '/1')
+    const arr = this._nuxtData(html)
+
+    // devalue: 章节对象模板形如 { id, index, title, duration, creator_type, creator_id }
+    // 其 index/title 字段值是“指向 arr 的下标”, 需再解引用
+    const all = []
+    for (let i = 0; i < arr.length; i++) {
+      const el = arr[i]
+      if (el && typeof el === 'object' && !Array.isArray(el)
+        && el.index !== undefined && el.title !== undefined && el.duration !== undefined) {
+        const idx = arr[el.index]
+        const title = arr[el.title]
+        if (typeof idx === 'number' && typeof title === 'string') {
+          all.push({ index: idx, name: title })
+        }
       }
     }
-    if (data.code && data.code !== 0) {
-      throw new Error('目录接口返回错误: code=' + data.code + ' msg=' + (data.msg || ''))
+    all.sort((a, b) => a.index - b.index)
+    if (all.length === 0) throw new Error('章节列表为空（解析失败或专辑无章节）')
+
+    // 专辑信息: 对象模板含 { title, cover_url, count, author }
+    const info = { title: '', cover: '', author: '', trackCount: all.length, isFinished: false }
+    for (let i = 0; i < arr.length; i++) {
+      const el = arr[i]
+      if (el && typeof el === 'object' && !Array.isArray(el)
+        && el.title !== undefined && el.cover_url !== undefined && el.count !== undefined) {
+        info.title = String(arr[el.title] || '')
+        info.cover = String(arr[el.cover_url] || '')
+        info.author = String(arr[el.author] || '')
+        info.trackCount = Number(arr[el.count]) || all.length
+        break
+      }
     }
-    const rows = Array.isArray(data.data) ? data.data : []
-    if (rows.length === 0) {
-      throw new Error('目录为空: keys=' + Object.keys(data).join(',') + ' | ' + JSON.stringify(data).slice(0, 300))
-    }
-    const info = data.info || {}
-    // 分页: 目录不分页则在 JS 侧切分
-    const total = rows.length
-    const maxPage = Math.max(1, Math.ceil(total / pageSize))
+
+    const maxPage = Math.max(1, Math.ceil(all.length / pageSize))
     const safePage = Math.max(1, Math.min(page, maxPage))
     const start = (safePage - 1) * pageSize
-    const slice = rows.slice(start, start + pageSize)
+    const slice = all.slice(start, start + pageSize)
     return {
-      info: {
-        title:      String(info.name  || info.title  || '').trim(),
-        cover:      String(info.pic   || info.cover  || '').trim(),
-        author:     String(info.author || ''),
-        trackCount: total,
-        isFinished: false,
-      },
-      list: slice.map((it, i) => ({
-        chapterId: String(it.id),
-        index:     start + i + 1,
-        name:      String(it.name || it.title || '').trim(),
+      info,
+      list: slice.map(x => ({
+        chapterId: bookId + '/' + x.index,   // 编码 albumId/index, 供 getAudioUrl 拼播放页
+        index: x.index,
+        name: x.name,
       })),
       page: safePage,
       maxPage,
@@ -138,24 +135,19 @@
     }
   },
 
-  // ── getAudioUrl: chapterId 就是音频的完整播放 URL ──
+  // ── getAudioUrl: chapterId = "albumId/index"。返回嗅探指令, 由 App WebView 抓时效签名直链 ──
   async getAudioUrl(chapterId) {
-    // 听优 worker 源的 getAudioUrl 直接返回 chapterId 作为音频地址
-    if (!chapterId || typeof chapterId !== 'string' || chapterId.length < 4) {
+    if (!chapterId || String(chapterId).indexOf('/') < 0) {
       throw new Error('无效的 chapterId: ' + JSON.stringify(chapterId))
     }
-    // 如果 chapterId 已经是完整 http 地址, 直接返回带 Referer 的结构
-    if (/^https?:\/\//i.test(chapterId)) {
-      return {
-        url: chapterId,
-        headers: { Referer: this._base + '/', 'User-Agent': this._ua },
-      }
-    }
-    // 否则拼接成完整 URL
-    const url = this._base + '/tingyou/play?id=' + chapterId
+    const url = this._base + '/audios/' + String(chapterId)
     return {
+      sniff: true,
       url,
-      headers: { Referer: this._base + '/', 'User-Agent': this._ua },
+      headers: { 'User-Agent': this._ua, Referer: this._base + '/' },
+      click: '.play-btn',                            // 播放页需点击“播放”触发音频请求
+      waitMs: 5000,
+      audioPatterns: ['file.hgeuz.cn/stream', '/stream/', '.mp3', '.m4a', '.aac', '.m3u8'],
     }
   },
 })

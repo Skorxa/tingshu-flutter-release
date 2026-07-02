@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import '../data/listening_stats_service.dart';
 import '../data/settings_service.dart';
 import 'baidu_pan_screen.dart';
+import 'cache_manage_screen.dart';
 import 'quark_pan_screen.dart';
 import 'runtime_log_screen.dart';
+import 'software_update_screen.dart';
 import 'source_manage_screen.dart';
 import 'webdav_screen.dart';
 
@@ -16,55 +18,6 @@ class SourceScreen extends StatefulWidget {
 }
 
 class _SourceScreenState extends State<SourceScreen> {
-  Future<void> _chooseInt({
-    required String title,
-    required int current,
-    required List<int> options,
-    required String Function(int value) label,
-    required ValueChanged<int> onSelected,
-  }) async {
-    final value = await showDialog<int>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: Text(title),
-        children: [
-          for (final option in options)
-            _dialogOption<int>(
-              ctx,
-              value: option,
-              current: current,
-              label: label(option),
-            ),
-        ],
-      ),
-    );
-    if (value != null) onSelected(value);
-  }
-
-  Future<void> _chooseFrequency(SettingsService settings) async {
-    final value = await showDialog<String>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('缓存频率'),
-        children: [
-          _dialogOption<String>(
-            ctx,
-            value: 'standard',
-            current: settings.cacheFrequency,
-            label: '标准（1分钟）',
-          ),
-          _dialogOption<String>(
-            ctx,
-            value: 'fast',
-            current: settings.cacheFrequency,
-            label: '快（3分钟）',
-          ),
-        ],
-      ),
-    );
-    if (value != null) settings.setCacheFrequency(value);
-  }
-
   Future<void> _chooseSearchMatchMode(SettingsService settings) async {
     final value = await showDialog<String>(
       context: context,
@@ -167,59 +120,30 @@ class _SourceScreenState extends State<SourceScreen> {
                 onChanged: settings.setAndroidAudioOffload,
               ),
             ),
-            _sectionTitle('缓存设置'),
+            _sectionTitle('缓存'),
             ListTile(
-              leading: const Icon(Icons.download_for_offline_outlined),
-              title: const Text('自动缓存后续章节'),
-              subtitle: const Text('播放时从当前集往后缓存'),
-              trailing: Switch(
-                value: settings.autoCache,
-                onChanged: settings.setAutoCache,
+              leading: const Icon(Icons.storage_outlined),
+              title: const Text('缓存管理'),
+              subtitle: Text(
+                '自动缓存 ${settings.autoCache ? '已开启' : '已关闭'} · 上限 ${settings.maxCacheChapters} 集 · ${settings.cacheFrequencyLabel}',
               ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.format_list_numbered),
-              title: const Text('每本书最大缓存集数'),
-              subtitle: const Text('按当前正在播放的集数往后计算'),
-              trailing: Text(
-                '${settings.maxCacheChapters} 集',
-                style: TextStyle(color: cs.onSurfaceVariant),
-              ),
-              onTap: () => _chooseInt(
-                title: '每本书最大缓存集数',
-                current: settings.maxCacheChapters,
-                options: SettingsService.cacheChapterOptions,
-                label: (v) => '$v 集',
-                onSelected: settings.setMaxCacheChapters,
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.schedule),
-              title: const Text('缓存频率'),
-              subtitle: const Text('自动缓存任务检查间隔'),
-              trailing: Text(
-                settings.cacheFrequencyLabel,
-                style: TextStyle(color: cs.onSurfaceVariant),
-              ),
-              onTap: () => _chooseFrequency(settings),
-            ),
-            ListTile(
-              leading: const Icon(Icons.cleaning_services_outlined),
-              title: const Text('自动清理缓存文件'),
-              subtitle: const Text('超过指定数量后从最老缓存开始清理'),
-              trailing: Text(
-                settings.cleanupLimitLabel,
-                style: TextStyle(color: cs.onSurfaceVariant),
-              ),
-              onTap: () => _chooseInt(
-                title: '自动清理缓存文件',
-                current: settings.cleanupLimit,
-                options: SettingsService.cleanupLimitOptions,
-                label: (v) => v == 0 ? '不清理' : '$v 集',
-                onSelected: settings.setCleanupLimit,
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const CacheManageScreen()),
               ),
             ),
             _sectionTitle('诊断'),
+            ListTile(
+              leading: const Icon(Icons.system_update_outlined),
+              title: const Text('软件更新'),
+              subtitle: const Text('检查公开仓库的新版本并下载安装包'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SoftwareUpdateScreen()),
+              ),
+            ),
             ListTile(
               leading: const Icon(Icons.article_outlined),
               title: const Text('查看运行日志'),
@@ -309,37 +233,91 @@ class _ListeningStatsCard extends StatelessWidget {
           color: cs.primaryContainer,
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(Icons.headphones, color: cs.onPrimaryContainer),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
+            Row(
+              children: [
+                Icon(Icons.headphones, color: cs.onPrimaryContainer),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
                     '听书时长',
                     style: TextStyle(
                       fontSize: 13,
                       color: cs.onPrimaryContainer.withValues(alpha: 0.78),
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '今日 ${stats.todayLabel} · 累计 ${stats.totalLabel}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: cs.onPrimaryContainer,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _StatsBadge(
+                  label: '今日',
+                  value: stats.todayLabel,
+                  colorScheme: cs,
+                ),
+                _StatsBadge(
+                  label: '累计',
+                  value: stats.totalLabel,
+                  colorScheme: cs,
+                ),
+              ],
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _StatsBadge extends StatelessWidget {
+  final String label;
+  final String value;
+  final ColorScheme colorScheme;
+
+  const _StatsBadge({
+    required this.label,
+    required this.value,
+    required this.colorScheme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 112, maxWidth: 220),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: colorScheme.onPrimaryContainer.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: colorScheme.onPrimaryContainer.withValues(alpha: 0.72),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: colorScheme.onPrimaryContainer,
+            ),
+          ),
+        ],
       ),
     );
   }

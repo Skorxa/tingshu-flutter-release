@@ -2,8 +2,13 @@ package com.tingshu.tingshu_flutter
 
 import android.app.Activity
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import android.provider.OpenableColumns
+import androidx.core.content.FileProvider
 import com.ryanheise.audioservice.AudioServiceActivity
+import java.io.File
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
@@ -53,6 +58,77 @@ class MainActivity : AudioServiceActivity() {
                 )
                 else -> result.notImplemented()
             }
+        }
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "tingshu/app_update"
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getAppVersion" -> getAppVersion(result)
+                "installApk" -> installApk(call.argument<String>("path") ?: "", result)
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    private fun getAppVersion(result: MethodChannel.Result) {
+        try {
+            val info = packageManager.getPackageInfo(packageName, 0)
+            val versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                info.longVersionCode.toInt()
+            } else {
+                @Suppress("DEPRECATION")
+                info.versionCode
+            }
+            result.success(
+                mapOf(
+                    "versionName" to (info.versionName ?: ""),
+                    "versionCode" to versionCode
+                )
+            )
+        } catch (e: Exception) {
+            result.error("VERSION_FAILED", e.message ?: "无法获取版本信息", null)
+        }
+    }
+
+    private fun installApk(filePath: String, result: MethodChannel.Result) {
+        if (filePath.isBlank()) {
+            result.error("EMPTY_PATH", "APK 路径为空", null)
+            return
+        }
+        val apk = File(filePath)
+        if (!apk.exists()) {
+            result.error("APK_NOT_FOUND", "APK 文件不存在: $filePath", null)
+            return
+        }
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                !packageManager.canRequestPackageInstalls()
+            ) {
+                val settingsIntent = Intent(
+                    Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    Uri.parse("package:$packageName")
+                ).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                startActivity(settingsIntent)
+                result.error("INSTALL_PERMISSION", "请先允许安装未知来源应用，然后重新点击安装", null)
+                return
+            }
+            val uri = FileProvider.getUriForFile(
+                this,
+                "$packageName.fileprovider",
+                apk
+            )
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+            result.success(true)
+        } catch (e: Exception) {
+            result.error("INSTALL_FAILED", e.message ?: "无法打开安装器", null)
         }
     }
 

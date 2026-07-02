@@ -29,6 +29,72 @@ class CacheClearResult {
   });
 }
 
+class CachedAudioEntry {
+  final String sourceId;
+  final String sourceName;
+  final String bookId;
+  final String bookTitle;
+  final String cover;
+  final String chapterId;
+  final String chapterName;
+  final int chapterIdx;
+  final String localPath;
+  final int size;
+  final int cachedAt;
+
+  const CachedAudioEntry({
+    required this.sourceId,
+    required this.sourceName,
+    required this.bookId,
+    required this.bookTitle,
+    required this.cover,
+    required this.chapterId,
+    required this.chapterName,
+    required this.chapterIdx,
+    required this.localPath,
+    required this.size,
+    required this.cachedAt,
+  });
+
+  String get key => '$sourceId::$chapterId';
+}
+
+class CachedAudioBook {
+  final String sourceId;
+  final String sourceName;
+  final String bookId;
+  final String bookTitle;
+  final String cover;
+  final List<CachedAudioEntry> entries;
+  final int totalBytes;
+  final int latestCachedAt;
+
+  const CachedAudioBook({
+    required this.sourceId,
+    required this.sourceName,
+    required this.bookId,
+    required this.bookTitle,
+    required this.cover,
+    required this.entries,
+    required this.totalBytes,
+    required this.latestCachedAt,
+  });
+
+  String get key => '$sourceId::$bookId';
+}
+
+class CacheLibrarySnapshot {
+  final List<CachedAudioBook> books;
+  final int totalFiles;
+  final int totalBytes;
+
+  const CacheLibrarySnapshot({
+    required this.books,
+    required this.totalFiles,
+    required this.totalBytes,
+  });
+}
+
 class _PlaybackCacheContext {
   final String sourceId;
   final String bookId;
@@ -164,35 +230,176 @@ class CacheService extends ChangeNotifier {
     required String sourceId,
     required String chapterId,
   }) async {
+    await removeEntries([
+      CachedAudioEntry(
+        sourceId: sourceId,
+        sourceName: SourceManager.instance.getSourceName(sourceId),
+        bookId: '',
+        bookTitle: '',
+        cover: '',
+        chapterId: chapterId,
+        chapterName: '',
+        chapterIdx: 0,
+        localPath: '',
+        size: 0,
+        cachedAt: 0,
+      ),
+    ]);
+  }
+
+  Future<CacheLibrarySnapshot> loadLibrary() async {
     final db = await getDb();
     final rows = await db.query(
       'cache_files',
-      columns: ['localPath'],
-      where: 'sourceId = ? AND chapterId = ?',
-      whereArgs: [sourceId, chapterId],
+      orderBy: 'cachedAt DESC, bookTitle COLLATE NOCASE ASC, chapterIdx ASC',
     );
+    final staleKeys = <MapEntry<String, String>>[];
+    final byBook = <String, List<CachedAudioEntry>>{};
+    var totalBytes = 0;
+
     for (final row in rows) {
+      final sourceId = '${row['sourceId'] ?? ''}';
+      final chapterId = '${row['chapterId'] ?? ''}';
       final localPath = '${row['localPath'] ?? ''}';
-      if (localPath.isEmpty) continue;
+      if (sourceId.isEmpty || chapterId.isEmpty || localPath.isEmpty) {
+        staleKeys.add(MapEntry(sourceId, chapterId));
+        continue;
+      }
       final file = File(localPath);
-      if (file.existsSync()) {
+      if (!file.existsSync()) {
+        staleKeys.add(MapEntry(sourceId, chapterId));
+        continue;
+      }
+      final rowSize = (row['size'] is num) ? (row['size'] as num).toInt() : 0;
+      final fileSize = rowSize > 0 ? rowSize : file.statSync().size;
+      final entry = CachedAudioEntry(
+        sourceId: sourceId,
+        sourceName: SourceManager.instance.getSourceName(sourceId),
+        bookId: '${row['bookId'] ?? ''}',
+        bookTitle: '${row['bookTitle'] ?? ''}',
+        cover: '${row['cover'] ?? ''}',
+        chapterId: chapterId,
+        chapterName: '${row['chapterName'] ?? ''}',
+        chapterIdx: (row['chapterIdx'] is num)
+            ? (row['chapterIdx'] as num).toInt()
+            : 0,
+        localPath: localPath,
+        size: fileSize,
+        cachedAt: (row['cachedAt'] is num)
+            ? (row['cachedAt'] as num).toInt()
+            : 0,
+      );
+      totalBytes += fileSize;
+      byBook
+          .putIfAbsent('${entry.sourceId}::${entry.bookId}', () => [])
+          .add(entry);
+    }
+
+    if (staleKeys.isNotEmpty) {
+      for (final key in staleKeys) {
+        await db.delete(
+          'cache_files',
+          where: 'sourceId = ? AND chapterId = ?',
+          whereArgs: [key.key, key.value],
+        );
+      }
+      _markCacheChanged();
+    }
+
+    final books = byBook.entries.map((group) {
+      final entries = [...group.value]
+        ..sort((a, b) => a.chapterIdx.compareTo(b.chapterIdx));
+      final first = entries.first;
+      final bookBytes = entries.fold<int>(0, (sum, entry) => sum + entry.size);
+      final latest = entries.fold<int>(
+        0,
+        (current, entry) => entry.cachedAt > current ? entry.cachedAt : current,
+      );
+      return CachedAudioBook(
+        sourceId: first.sourceId,
+        sourceName: first.sourceName,
+        bookId: first.bookId,
+        bookTitle: first.bookTitle,
+        cover: first.cover,
+        entries: entries,
+        totalBytes: bookBytes,
+        latestCachedAt: latest,
+      );
+    }).toList()..sort((a, b) => b.latestCachedAt.compareTo(a.latestCachedAt));
+
+    return CacheLibrarySnapshot(
+      books: books,
+      totalFiles: books.fold<int>(0, (sum, book) => sum + book.entries.length),
+      totalBytes: totalBytes,
+    );
+  }
+
+  Future<CacheClearResult> removeEntries(
+    Iterable<CachedAudioEntry> entries,
+  ) async {
+    final targetKeys = entries
+        .map((entry) => '${entry.sourceId}::${entry.chapterId}')
+        .where((key) => key != '::')
+        .toSet();
+    final targets = targetKeys
+        .map((key) {
+          final index = key.indexOf('::');
+          return MapEntry(key.substring(0, index), key.substring(index + 2));
+        })
+        .toList(growable: false);
+    if (targets.isEmpty) {
+      return CacheClearResult(files: 0, rows: 0, bytes: 0);
+    }
+
+    final db = await getDb();
+    var deletedFiles = 0;
+    var deletedRows = 0;
+    var deletedBytes = 0;
+
+    for (final target in targets) {
+      final rows = await db.query(
+        'cache_files',
+        columns: ['localPath', 'size'],
+        where: 'sourceId = ? AND chapterId = ?',
+        whereArgs: [target.key, target.value],
+      );
+      for (final row in rows) {
+        final localPath = '${row['localPath'] ?? ''}';
+        if (localPath.isEmpty) continue;
+        final file = File(localPath);
+        if (!file.existsSync()) continue;
         try {
+          final stat = file.statSync();
           await file.delete();
+          deletedFiles++;
+          deletedBytes += stat.size;
         } catch (e) {
           LogService.instance.warning(
             'Cache',
-            '删除损坏缓存文件失败',
+            '删除缓存文件失败',
             detail: '路径: $localPath\n错误: $e',
           );
         }
       }
+      deletedRows += await db.delete(
+        'cache_files',
+        where: 'sourceId = ? AND chapterId = ?',
+        whereArgs: [target.key, target.value],
+      );
     }
-    await db.delete(
-      'cache_files',
-      where: 'sourceId = ? AND chapterId = ?',
-      whereArgs: [sourceId, chapterId],
+
+    if (deletedRows > 0 || deletedFiles > 0) _markCacheChanged();
+    LogService.instance.info(
+      'Cache',
+      '已删除选中缓存',
+      detail:
+          '条目: ${targets.length}\n删除文件: $deletedFiles\n删除索引: $deletedRows\n释放空间: $deletedBytes bytes',
     );
-    _markCacheChanged();
+    return CacheClearResult(
+      files: deletedFiles,
+      rows: deletedRows,
+      bytes: deletedBytes,
+    );
   }
 
   void _markCacheChanged() {

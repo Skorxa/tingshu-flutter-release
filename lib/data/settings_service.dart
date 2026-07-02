@@ -28,6 +28,7 @@ class SettingsService extends ChangeNotifier {
   static const _kAggregateSearch = 'settings_aggregate_search';
   static const _kDynamicColor = 'settings_dynamic_color';
   static const _kSearchMatchMode = 'settings_search_match_mode';
+  static const _kUpdateManifestUrl = 'settings_update_manifest_url';
 
   bool _darkMode = false;
   bool _androidAudioOffload = false;
@@ -38,6 +39,7 @@ class SettingsService extends ChangeNotifier {
   int _maxCacheChapters = 3;
   String _cacheFrequency = 'standard';
   int _cleanupLimit = 100;
+  String _updateManifestUrl = '';
   bool _ready = false;
 
   bool get darkMode => _darkMode;
@@ -49,6 +51,7 @@ class SettingsService extends ChangeNotifier {
   int get maxCacheChapters => _maxCacheChapters;
   String get cacheFrequency => _cacheFrequency;
   int get cleanupLimit => _cleanupLimit;
+  String get updateManifestUrl => _updateManifestUrl;
   bool get ready => _ready;
 
   int get cacheFrequencyMinutes => _cacheFrequency == 'fast' ? 3 : 1;
@@ -84,6 +87,7 @@ class SettingsService extends ChangeNotifier {
       cleanupLimitOptions,
       100,
     );
+    _updateManifestUrl = prefs.getString(_kUpdateManifestUrl) ?? '';
     _ready = true;
   }
 
@@ -156,5 +160,12 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_kCleanupLimit, value);
+  }
+
+  Future<void> setUpdateManifestUrl(String value) async {
+    _updateManifestUrl = value.trim();
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kUpdateManifestUrl, _updateManifestUrl);
   }
 }

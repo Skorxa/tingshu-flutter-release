@@ -204,6 +204,7 @@ class SourceManager {
   final List<Map<String, dynamic>> _stored = []; // {id,name,code,enabled}
   String _activeId = '';
   final Set<String> _registered = {}; // 已在 JS 引擎注册的音源 id
+  final Map<String, Future<void>> _registering = {};
   bool _ready = false;
 
   Future<void> init() async {
@@ -250,8 +251,21 @@ class SourceManager {
   Future<void> _ensureRegistered(Map<String, dynamic> s) async {
     final id = '${s['id']}';
     if (!_registered.contains(id)) {
-      await JsEngine.instance.loadSource('${s['code']}');
-      _registered.add(id);
+      final inflight = _registering[id];
+      if (inflight != null) {
+        await inflight;
+      } else {
+        final future = () async {
+          await JsEngine.instance.loadSource('${s['code']}');
+          _registered.add(id);
+        }();
+        _registering[id] = future;
+        try {
+          await future;
+        } finally {
+          _registering.remove(id);
+        }
+      }
     }
     await _applyConfig(s);
   }
