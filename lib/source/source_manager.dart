@@ -22,6 +22,77 @@ class SourceSubscriptionResult {
   });
 }
 
+class _SubscriptionRequest {
+  final String originalUrl;
+  final String requestUrl;
+  final String token;
+
+  const _SubscriptionRequest({
+    required this.originalUrl,
+    required this.requestUrl,
+    required this.token,
+  });
+
+  factory _SubscriptionRequest.parse(String raw) {
+    final trimmed = raw.trim();
+    final uri = Uri.tryParse(trimmed);
+    if (uri == null) {
+      return _SubscriptionRequest(
+        originalUrl: trimmed,
+        requestUrl: trimmed,
+        token: '',
+      );
+    }
+    final fragment = uri.fragment.trim();
+    final token = _extractToken(fragment);
+    final requestUrl = fragment.isEmpty
+        ? trimmed
+        : uri.replace(fragment: '').toString();
+    return _SubscriptionRequest(
+      originalUrl: trimmed,
+      requestUrl: requestUrl,
+      token: token,
+    );
+  }
+
+  Map<String, String>? get headers {
+    if (token.isEmpty) return null;
+    return {
+      'Authorization': 'Bearer $token',
+      'Accept': 'application/vnd.github.raw+json, text/plain, */*',
+    };
+  }
+
+  String get maskedUrl => _maskSecret(originalUrl);
+
+  static String _extractToken(String fragment) {
+    if (fragment.isEmpty) return '';
+    if (!fragment.contains('=')) return Uri.decodeComponent(fragment);
+    final values = Uri.splitQueryString(fragment);
+    for (final key in ['token', 'gh_token', 'access_token']) {
+      final value = values[key]?.trim();
+      if (value != null && value.isNotEmpty) return value;
+    }
+    return '';
+  }
+
+  static String _maskSecret(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null || uri.fragment.isEmpty) return url;
+    final fragment = uri.fragment;
+    if (!fragment.contains('=')) return uri.replace(fragment: '***').toString();
+    final values = Uri.splitQueryString(fragment);
+    final masked = values.map((key, value) {
+      final lower = key.toLowerCase();
+      if (lower == 'token' || lower == 'gh_token' || lower == 'access_token') {
+        return MapEntry(key, '***');
+      }
+      return MapEntry(key, value);
+    });
+    return uri.replace(fragment: Uri(queryParameters: masked).query).toString();
+  }
+}
+
 /// 音源管理器:对齐 uni-app 版 sourceLoader 的能力。
 /// - 音源 code + 启用状态 + 激活ID 存 shared_preferences
 /// - 音源订阅 URL 存 shared_preferences,同步后把云端 JS 源落到本地
@@ -285,19 +356,20 @@ class SourceManager {
   String get subscriptionUrl => _subscriptionUrl;
 
   Future<SourceSubscriptionResult> syncSubscription(String url) async {
-    final normalized = url.trim();
-    if (normalized.isEmpty) throw Exception('订阅地址为空');
+    final request = _SubscriptionRequest.parse(url);
+    if (request.originalUrl.isEmpty) throw Exception('订阅地址为空');
     LogService.instance.info(
       'SourceSub',
       '开始同步音源订阅',
-      detail: 'URL: $normalized',
+      detail: 'URL: ${request.maskedUrl}',
     );
     final resp = await _dio.get<String>(
-      normalized,
+      request.requestUrl,
       options: Options(
         responseType: ResponseType.plain,
         receiveTimeout: const Duration(seconds: 30),
         validateStatus: (_) => true,
+        headers: request.headers,
       ),
     );
     if ((resp.statusCode ?? 0) < 200 || (resp.statusCode ?? 0) >= 300) {
@@ -317,7 +389,7 @@ class SourceManager {
       final item = rawSources[i];
       if (item is! Map) throw Exception('sources[$i] 必须是对象');
       final map = Map<String, dynamic>.from(item);
-      final code = await _resolveSubscriptionCode(normalized, map, i);
+      final code = await _resolveSubscriptionCode(request, map, i);
       final metaOverride = <String, dynamic>{
         for (final key in [
           'id',
@@ -334,7 +406,7 @@ class SourceManager {
         code,
         persist: false,
         metaOverride: metaOverride.isEmpty ? null : metaOverride,
-        subscriptionUrl: normalized,
+        subscriptionUrl: request.requestUrl,
       );
       final id = '${meta['id']}';
       seenIds.add(id);
@@ -349,7 +421,7 @@ class SourceManager {
     _stored.removeWhere((source) {
       final id = '${source['id']}';
       final shouldRemove =
-          '${source['subscriptionUrl'] ?? ''}' == normalized &&
+          '${source['subscriptionUrl'] ?? ''}' == request.requestUrl &&
           !seenIds.contains(id);
       if (shouldRemove) {
         removed.add(id);
@@ -357,7 +429,7 @@ class SourceManager {
       }
       return shouldRemove;
     });
-    _subscriptionUrl = normalized;
+    _subscriptionUrl = request.originalUrl;
     if (_activeId.isEmpty || !_stored.any((s) => '${s['id']}' == _activeId)) {
       _activeId = _firstEnabledId();
     }
@@ -377,7 +449,7 @@ class SourceManager {
   }
 
   Future<String> _resolveSubscriptionCode(
-    String subscriptionUrl,
+    _SubscriptionRequest request,
     Map<String, dynamic> item,
     int index,
   ) async {
@@ -386,13 +458,14 @@ class SourceManager {
     final rawUrl = '${item['url'] ?? item['sourceUrl'] ?? item['jsUrl'] ?? ''}'
         .trim();
     if (rawUrl.isEmpty) throw Exception('sources[$index] 缺少 code 或 url');
-    final sourceUrl = _resolveUrl(subscriptionUrl, rawUrl);
+    final sourceUrl = _resolveUrl(request.requestUrl, rawUrl);
     final resp = await _dio.get<String>(
       sourceUrl,
       options: Options(
         responseType: ResponseType.plain,
         receiveTimeout: const Duration(seconds: 30),
         validateStatus: (_) => true,
+        headers: request.headers,
       ),
     );
     if ((resp.statusCode ?? 0) < 200 || (resp.statusCode ?? 0) >= 300) {
