@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/catalog_cache_service.dart';
@@ -8,9 +8,23 @@ import 'js_engine.dart';
 import 'models.dart';
 import 'source_contract.dart';
 
+class SourceSubscriptionResult {
+  final int added;
+  final int updated;
+  final int removed;
+  final int total;
+
+  const SourceSubscriptionResult({
+    required this.added,
+    required this.updated,
+    required this.removed,
+    required this.total,
+  });
+}
+
 /// 音源管理器:对齐 uni-app 版 sourceLoader 的能力。
 /// - 音源 code + 启用状态 + 激活ID 存 shared_preferences
-/// - 首次启动预置内置示例音源(assets)
+/// - 音源订阅 URL 存 shared_preferences,同步后把云端 JS 源落到本地
 /// - 高层 search/getChapters/getAudioUrl 路由到当前激活音源
 class SourceManager {
   SourceManager._();
@@ -19,190 +33,46 @@ class SourceManager {
 
   static const _kSources = 'audio_sources'; // List<json:{id,name,code,enabled}>
   static const _kActive = 'active_source_id';
+  static const _kSubscriptionUrl = 'audio_source_subscription_url';
 
-  // 首启预置的内置音源 assets。内置源启动时只登记元信息,首次使用时再编译
-  // JS,避免启动阶段一次性编译十几个音源导致主线程长时间卡顿。
-  static const _bundled = [
-    _BundledSource('assets/sources/yuanqi.js', 'yuanqi', '元气听书'),
-    _BundledSource('assets/sources/beiji-kuwo.js', 'beiji-kuwo', '北极听书'),
-    _BundledSource('assets/sources/ytysxs.js', 'ytysxs', '雨听有声小说'),
-    _BundledSource(
-      'assets/sources/qingtian-xmly.js',
-      'qt-ximalaya',
-      '青天·喜马拉雅',
-      loginUrl: 'https://v1.gyks.cf/login',
-      loginConfigKey: 'qt_cookie',
-      configFields: [
-        {
-          'key': 'qt_cookie',
-          'label': '青天 Cookie',
-          'type': 'textarea',
-          'hint': '可通过音源登录页自动获取。',
-          'login': true,
-          'required': true,
-        },
-      ],
-    ),
-    _BundledSource(
-      'assets/sources/qingtian-fanqie.js',
-      'qt-fanqie',
-      '青天·番茄',
-      loginUrl: 'https://v1.gyks.cf/login',
-      loginConfigKey: 'qt_cookie',
-      configFields: [
-        {
-          'key': 'qt_cookie',
-          'label': '青天 Cookie',
-          'type': 'textarea',
-          'hint': '可通过音源登录页自动获取。',
-          'login': true,
-          'required': true,
-        },
-      ],
-    ),
-    _BundledSource(
-      'assets/sources/qingtian-kuwo.js',
-      'qt-kuwo',
-      '青天·酷我',
-      loginUrl: 'https://v1.gyks.cf/login',
-      loginConfigKey: 'qt_cookie',
-      configFields: [
-        {
-          'key': 'qt_cookie',
-          'label': '青天 Cookie',
-          'type': 'textarea',
-          'hint': '可通过音源登录页自动获取。',
-          'login': true,
-          'required': true,
-        },
-      ],
-    ),
-    _BundledSource(
-      'assets/sources/qingtian-qimao.js',
-      'qt-qimao',
-      '青天·七猫',
-      loginUrl: 'https://v1.gyks.cf/login',
-      loginConfigKey: 'qt_cookie',
-      configFields: [
-        {
-          'key': 'qt_cookie',
-          'label': '青天 Cookie',
-          'type': 'textarea',
-          'hint': '可通过音源登录页自动获取。',
-          'login': true,
-          'required': true,
-        },
-      ],
-    ),
-    _BundledSource(
-      'assets/sources/eprendre-bilibili.js',
-      'eprendre-bilibili',
-      'BiliBili',
-    ),
-    _BundledSource(
-      'assets/sources/eprendre-bokan-yousheng.js',
-      'eprendre-bokan-yousheng',
-      '博看有声',
-    ),
-    _BundledSource('assets/sources/eprendre-cnr.js', 'eprendre-cnr', '云听'),
-    _BundledSource(
-      'assets/sources/eprendre-haiyang.js',
-      'eprendre-haiyang',
-      '海洋听书网',
-      configFields: [
-        {'key': 'cookie', 'label': '海洋 Cookie', 'type': 'textarea'},
-      ],
-    ),
-    _BundledSource('assets/sources/eprendre-ifish.js', 'eprendre-ifish', '爱听书'),
-    _BundledSource('assets/sources/eprendre-jdlg.js', 'eprendre-jdlg', '静读乐听'),
-    _BundledSource('assets/sources/eprendre-jihe.js', 'eprendre-jihe', '鸡盒盘'),
-    _BundledSource(
-      'assets/sources/eprendre-koudai-weiketang.js',
-      'eprendre-koudai-weiketang',
-      '口袋微课堂',
-    ),
-    _BundledSource('assets/sources/eprendre-kuwo.js', 'eprendre-kuwo', '酷我畅听'),
-    _BundledSource(
-      'assets/sources/eprendre-lanren.js',
-      'eprendre-lanren',
-      '懒人听书',
-      loginUrl: 'https://m.lrts.me/user',
-      loginConfigKey: 'cookie',
-      configFields: [
-        {
-          'key': 'cookie',
-          'label': '懒人 Cookie',
-          'type': 'textarea',
-          'hint': '可通过音源登录页自动获取。',
-          'login': true,
-        },
-      ],
-    ),
-    _BundledSource(
-      'assets/sources/eprendre-pingshu5.js',
-      'eprendre-pingshu5',
-      '单田芳评书网',
-    ),
-    _BundledSource(
-      'assets/sources/eprendre-ting74.js',
-      'eprendre-ting74',
-      '听书74',
-    ),
-    _BundledSource('assets/sources/eprendre-vbus.js', 'eprendre-vbus', 'VBus'),
-    _BundledSource(
-      'assets/sources/eprendre-ysxs8.js',
-      'eprendre-ysxs8',
-      '有声小说吧',
-      configFields: [
-        {'key': 'cookie', 'label': '有声小说吧 Cookie', 'type': 'textarea'},
-      ],
-    ),
-    _BundledSource(
-      'assets/sources/eprendre-yuntu-yousheng.js',
-      'eprendre-yuntu-yousheng',
-      '云图有声',
-    ),
-    _BundledSource(
-      'assets/sources/tj-yuetingba.js',
-      'tingshu-json-yuetingba',
-      '悦听吧',
-    ),
-    _BundledSource(
-      'assets/sources/tj-yuanqi-ximalaya.js',
-      'tingshu-json-yuanqi-ximalaya',
-      '元气听书-喜马拉雅',
-    ),
-    _BundledSource(
-      'assets/sources/tj-ting13.js',
-      'tingshu-json-ting13',
-      '13听书网',
-    ),
-    _BundledSource('assets/sources/tj-qiting.js', 'tingshu-json-qiting', '奇听网'),
-    _BundledSource(
-      'assets/sources/tj-tingyou-worker.js',
-      'tingshu-json-tingyou',
-      '听友FM（Worker）',
-    ),
-    _BundledSource(
-      'assets/sources/tj-i275-worker.js',
-      'tingshu-json-i275',
-      '275听书网（Worker）',
-    ),
-    _BundledSource(
-      'assets/sources/tj-leting-worker.js',
-      'tingshu-json-leting',
-      '乐听网（Worker）',
-    ),
-    _BundledSource(
-      'assets/sources/tj-shuyinfm.js',
-      'tingshu-json-shuyinfm',
-      '天下书音',
-    ),
-    _BundledSource('assets/sources/tingyou.js', 'tingyou', '听优有声'),
-  ];
+  static const _removedBundledIds = {
+    'yuanqi',
+    'beiji-kuwo',
+    'ytysxs',
+    'qt-ximalaya',
+    'qt-fanqie',
+    'qt-kuwo',
+    'qt-qimao',
+    'eprendre-bilibili',
+    'eprendre-bokan-yousheng',
+    'eprendre-cnr',
+    'eprendre-haiyang',
+    'eprendre-ifish',
+    'eprendre-jdlg',
+    'eprendre-jihe',
+    'eprendre-koudai-weiketang',
+    'eprendre-kuwo',
+    'eprendre-lanren',
+    'eprendre-pingshu5',
+    'eprendre-ting74',
+    'eprendre-vbus',
+    'eprendre-ysxs8',
+    'eprendre-yuntu-yousheng',
+    'tingshu-json-yuetingba',
+    'tingshu-json-yuanqi-ximalaya',
+    'tingshu-json-ting13',
+    'tingshu-json-qiting',
+    'tingshu-json-tingyou',
+    'tingshu-json-i275',
+    'tingshu-json-leting',
+    'tingshu-json-shuyinfm',
+    'tingyou',
+  };
 
   final List<Map<String, dynamic>> _stored = []; // {id,name,code,enabled}
+  final Dio _dio = Dio();
   String _activeId = '';
+  String _subscriptionUrl = '';
   final Set<String> _registered = {}; // 已在 JS 引擎注册的音源 id
   final Map<String, Future<void>> _registering = {};
   bool _ready = false;
@@ -219,19 +89,20 @@ class SourceManager {
         ..addAll(list.map((e) => Map<String, dynamic>.from(e as Map)));
     }
     _activeId = prefs.getString(_kActive) ?? '';
+    _subscriptionUrl = prefs.getString(_kSubscriptionUrl) ?? '';
 
-    // 每次启动刷新内置音源代码,保留用户的启用/关闭状态。
-    for (final bundled in _bundled) {
-      try {
-        final code = await rootBundle.loadString(bundled.path);
-        await _addInternal(code, persist: false, bundled: bundled);
-      } catch (e) {
-        LogService.instance.warning(
-          'Source',
-          '内置音源刷新失败',
-          detail: '路径: ${bundled.path}\n错误: $e',
-        );
-      }
+    final before = _stored.length;
+    _stored.removeWhere(
+      (source) => _removedBundledIds.contains('${source['id']}'),
+    );
+    if (before != _stored.length) {
+      _registered.removeWhere(_removedBundledIds.contains);
+      if (_removedBundledIds.contains(_activeId)) _activeId = _firstEnabledId();
+      LogService.instance.info(
+        'Source',
+        '已移除旧版内置音源',
+        detail: '删除数量: ${before - _stored.length}',
+      );
     }
     await _persist();
 
@@ -245,6 +116,7 @@ class SourceManager {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kSources, jsonEncode(_stored));
     await prefs.setString(_kActive, _activeId);
+    await prefs.setString(_kSubscriptionUrl, _subscriptionUrl);
   }
 
   // 注册到 JS 引擎(幂等)
@@ -362,11 +234,13 @@ class SourceManager {
   Future<Map<String, dynamic>> _addInternal(
     String code, {
     bool persist = true,
-    _BundledSource? bundled,
+    Map<String, dynamic>? metaOverride,
+    String subscriptionUrl = '',
   }) async {
-    final meta = bundled?.toMeta() ?? await JsEngine.instance.loadSource(code);
+    final parsed = await JsEngine.instance.loadSource(code);
+    final meta = {...parsed, ...?metaOverride};
     final id = meta['id']!;
-    if (bundled == null) _registered.add(id);
+    _registered.add(id);
     final idx = _stored.indexWhere((e) => '${e['id']}' == id);
     final entry = <String, dynamic>{
       'id': id,
@@ -377,6 +251,9 @@ class SourceManager {
       'loginConfigKey': '${meta['loginConfigKey'] ?? ''}',
       'code': code,
       'enabled': idx >= 0 ? _stored[idx]['enabled'] != false : true,
+      'subscriptionUrl': subscriptionUrl.isNotEmpty
+          ? subscriptionUrl
+          : (idx >= 0 ? '${_stored[idx]['subscriptionUrl'] ?? ''}' : ''),
     };
     entry['config'] = _filterConfig(
       idx >= 0 ? _configOf(_stored[idx]) : <String, dynamic>{},
@@ -404,6 +281,134 @@ class SourceManager {
 
   /// 添加/更新用户音源(粘贴的 JS code)
   Future<Map<String, dynamic>> addSource(String code) => _addInternal(code);
+
+  String get subscriptionUrl => _subscriptionUrl;
+
+  Future<SourceSubscriptionResult> syncSubscription(String url) async {
+    final normalized = url.trim();
+    if (normalized.isEmpty) throw Exception('订阅地址为空');
+    LogService.instance.info(
+      'SourceSub',
+      '开始同步音源订阅',
+      detail: 'URL: $normalized',
+    );
+    final resp = await _dio.get<String>(
+      normalized,
+      options: Options(
+        responseType: ResponseType.plain,
+        receiveTimeout: const Duration(seconds: 30),
+        validateStatus: (_) => true,
+      ),
+    );
+    if ((resp.statusCode ?? 0) < 200 || (resp.statusCode ?? 0) >= 300) {
+      throw Exception('订阅请求失败:${resp.statusCode}');
+    }
+    final raw = resp.data ?? '';
+    final dynamic decoded = jsonDecode(raw);
+    final rawSources = decoded is List
+        ? decoded
+        : (decoded is Map ? decoded['sources'] : null);
+    if (rawSources is! List) throw Exception('订阅格式错误:缺少 sources 数组');
+
+    final seenIds = <String>{};
+    var added = 0;
+    var updated = 0;
+    for (var i = 0; i < rawSources.length; i++) {
+      final item = rawSources[i];
+      if (item is! Map) throw Exception('sources[$i] 必须是对象');
+      final map = Map<String, dynamic>.from(item);
+      final code = await _resolveSubscriptionCode(normalized, map, i);
+      final metaOverride = <String, dynamic>{
+        for (final key in [
+          'id',
+          'name',
+          'apiVersion',
+          'configFields',
+          'loginUrl',
+          'loginConfigKey',
+        ])
+          if (map.containsKey(key)) key: map[key],
+      };
+      final existed = _stored.any((e) => '${e['id']}' == '${map['id'] ?? ''}');
+      final meta = await _addInternal(
+        code,
+        persist: false,
+        metaOverride: metaOverride.isEmpty ? null : metaOverride,
+        subscriptionUrl: normalized,
+      );
+      final id = '${meta['id']}';
+      seenIds.add(id);
+      final idx = _stored.indexWhere((e) => '${e['id']}' == id);
+      if (idx >= 0 && map.containsKey('enabled')) {
+        _stored[idx]['enabled'] = map['enabled'] != false;
+      }
+      existed ? updated++ : added++;
+    }
+
+    final removed = <String>[];
+    _stored.removeWhere((source) {
+      final id = '${source['id']}';
+      final shouldRemove =
+          '${source['subscriptionUrl'] ?? ''}' == normalized &&
+          !seenIds.contains(id);
+      if (shouldRemove) {
+        removed.add(id);
+        _registered.remove(id);
+      }
+      return shouldRemove;
+    });
+    _subscriptionUrl = normalized;
+    if (_activeId.isEmpty || !_stored.any((s) => '${s['id']}' == _activeId)) {
+      _activeId = _firstEnabledId();
+    }
+    await _persist();
+    LogService.instance.info(
+      'SourceSub',
+      '音源订阅同步完成',
+      detail:
+          '新增: $added\n更新: $updated\n删除: ${removed.length}\n总数: ${_stored.length}',
+    );
+    return SourceSubscriptionResult(
+      added: added,
+      updated: updated,
+      removed: removed.length,
+      total: _stored.length,
+    );
+  }
+
+  Future<String> _resolveSubscriptionCode(
+    String subscriptionUrl,
+    Map<String, dynamic> item,
+    int index,
+  ) async {
+    final directCode = '${item['code'] ?? ''}'.trim();
+    if (directCode.isNotEmpty) return directCode;
+    final rawUrl = '${item['url'] ?? item['sourceUrl'] ?? item['jsUrl'] ?? ''}'
+        .trim();
+    if (rawUrl.isEmpty) throw Exception('sources[$index] 缺少 code 或 url');
+    final sourceUrl = _resolveUrl(subscriptionUrl, rawUrl);
+    final resp = await _dio.get<String>(
+      sourceUrl,
+      options: Options(
+        responseType: ResponseType.plain,
+        receiveTimeout: const Duration(seconds: 30),
+        validateStatus: (_) => true,
+      ),
+    );
+    if ((resp.statusCode ?? 0) < 200 || (resp.statusCode ?? 0) >= 300) {
+      throw Exception('音源 JS 请求失败:${resp.statusCode} $sourceUrl');
+    }
+    final code = resp.data ?? '';
+    if (code.trim().isEmpty) throw Exception('音源 JS 为空:$sourceUrl');
+    return code;
+  }
+
+  String _resolveUrl(String baseUrl, String value) {
+    final uri = Uri.tryParse(value);
+    if (uri != null && uri.hasScheme) return uri.toString();
+    final base = Uri.tryParse(baseUrl);
+    return base == null ? value : base.resolve(value).toString();
+  }
 
   Future<void> deleteSource(String id) async {
     String name = '';
@@ -707,31 +712,4 @@ class SourceManager {
       sourceName: '${s['name'] ?? sourceId}',
     );
   }
-}
-
-class _BundledSource {
-  final String path;
-  final String id;
-  final String name;
-  final String loginUrl;
-  final String loginConfigKey;
-  final List<Map<String, dynamic>> configFields;
-
-  const _BundledSource(
-    this.path,
-    this.id,
-    this.name, {
-    this.loginUrl = '',
-    this.loginConfigKey = '',
-    this.configFields = const [],
-  });
-
-  Map<String, dynamic> toMeta() => {
-    'id': id,
-    'name': name,
-    'apiVersion': '${SourceContract.version}',
-    'configFields': configFields,
-    'loginUrl': loginUrl,
-    'loginConfigKey': loginConfigKey,
-  };
 }

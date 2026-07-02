@@ -164,6 +164,7 @@ class _SourceManageScreenState extends State<SourceManageScreen> {
     required String hintText,
     TextInputType keyboardType = TextInputType.url,
     String confirmText = '导入',
+    String initialText = '',
   }) {
     return showDialog<String>(
       context: context,
@@ -172,8 +173,32 @@ class _SourceManageScreenState extends State<SourceManageScreen> {
         hintText: hintText,
         keyboardType: keyboardType,
         confirmText: confirmText,
+        initialText: initialText,
       ),
     );
+  }
+
+  Future<void> _syncSubscription() async {
+    final url = await _singleInputDialog(
+      title: '音源订阅',
+      hintText: '输入订阅 JSON 链接',
+      confirmText: '同步',
+      initialText: SourceManager.instance.subscriptionUrl,
+    );
+    if (url == null || url.trim().isEmpty) return;
+    setState(() => _loading = true);
+    try {
+      final result = await SourceManager.instance.syncSubscription(url.trim());
+      _refresh();
+      _toast(
+        '订阅同步完成：新增 ${result.added}，更新 ${result.updated}，删除 ${result.removed}',
+      );
+    } catch (e) {
+      LogService.instance.error('SourceSub', '音源订阅同步失败', error: e);
+      _toast(e.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   Future<void> _delete(SourceMeta source) async {
@@ -505,9 +530,20 @@ class _SourceManageScreenState extends State<SourceManageScreen> {
             ),
           ),
           Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: SizedBox(
+              width: double.infinity,
+              child: FilledButton.tonalIcon(
+                onPressed: _loading ? null : _syncSubscription,
+                icon: const Icon(Icons.cloud_sync_outlined),
+                label: const Text('同步订阅源'),
+              ),
+            ),
+          ),
+          Padding(
             padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
             child: Text(
-              '本地导入会调起系统文件管理器,选择 .js 音源文件;也可用右上角粘贴文本导入。',
+              '推荐使用订阅源同步;本地导入会调起系统文件管理器选择 .js 音源文件,也可用右上角粘贴文本导入。',
               style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
             ),
           ),
@@ -526,7 +562,7 @@ class _SourceManageScreenState extends State<SourceManageScreen> {
                     ),
                     child: Center(
                       child: Text(
-                        '暂无音源,可以从本地文件或链接导入',
+                        '暂无音源,可以先同步订阅源',
                         style: TextStyle(color: cs.onSurfaceVariant),
                       ),
                     ),
@@ -620,6 +656,7 @@ class _PromptDialog extends StatefulWidget {
   final int maxLines;
   final TextInputType keyboardType;
   final String confirmText;
+  final String initialText;
 
   const _PromptDialog({
     required this.title,
@@ -627,6 +664,7 @@ class _PromptDialog extends StatefulWidget {
     this.maxLines = 1,
     this.keyboardType = TextInputType.text,
     this.confirmText = '确定',
+    this.initialText = '',
   });
 
   @override
@@ -640,6 +678,12 @@ class _PromptDialogState extends State<_PromptDialog> {
   void dispose() {
     _ctrl.dispose();
     super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl.text = widget.initialText;
   }
 
   @override
