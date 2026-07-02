@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -93,9 +94,21 @@ class _SubscriptionRequest {
   }
 }
 
+class _SubscriptionPayload {
+  final _SubscriptionRequest request;
+  final List rawSources;
+  final String version;
+
+  const _SubscriptionPayload({
+    required this.request,
+    required this.rawSources,
+    required this.version,
+  });
+}
+
 /// 音源管理器:对齐 uni-app 版 sourceLoader 的能力。
 /// - 音源 code + 启用状态 + 激活ID 存 shared_preferences
-/// - 音源订阅 URL 存 shared_preferences,同步后把云端 JS 源落到本地
+/// - 音源订阅配置存 shared_preferences,同步后把云端 JS 源落到本地
 /// - 高层 search/getChapters/getAudioUrl 路由到当前激活音源
 class SourceManager {
   SourceManager._();
@@ -105,6 +118,7 @@ class SourceManager {
   static const _kSources = 'audio_sources'; // List<json:{id,name,code,enabled}>
   static const _kActive = 'active_source_id';
   static const _kSubscriptionUrl = 'audio_source_subscription_url';
+  static const _kSubscriptions = 'audio_source_subscriptions';
 
   static const _removedBundledIds = {
     'yuanqi',
@@ -141,11 +155,14 @@ class SourceManager {
   };
 
   final List<Map<String, dynamic>> _stored = []; // {id,name,code,enabled}
+  final List<Map<String, dynamic>> _subscriptions = [];
   final Dio _dio = Dio();
   String _activeId = '';
   String _subscriptionUrl = '';
   final Set<String> _registered = {}; // 已在 JS 引擎注册的音源 id
   final Map<String, Future<void>> _registering = {};
+  final Map<String, Future<SourceSubscriptionResult>> _syncingSubscriptions =
+      {};
   bool _ready = false;
 
   Future<void> init() async {
@@ -161,6 +178,13 @@ class SourceManager {
     }
     _activeId = prefs.getString(_kActive) ?? '';
     _subscriptionUrl = prefs.getString(_kSubscriptionUrl) ?? '';
+    final rawSubscriptions = prefs.getString(_kSubscriptions);
+    if (rawSubscriptions != null && rawSubscriptions.isNotEmpty) {
+      final list = jsonDecode(rawSubscriptions) as List;
+      _subscriptions
+        ..clear()
+        ..addAll(list.map((e) => Map<String, dynamic>.from(e as Map)));
+    }
 
     final before = _stored.length;
     _stored.removeWhere(
@@ -175,12 +199,17 @@ class SourceManager {
         detail: '删除数量: ${before - _stored.length}',
       );
     }
+    _migrateLegacySubscriptionData();
+    _backfillSourceSubscriptionIds();
     await _persist();
 
     if (_activeId.isEmpty && _stored.isNotEmpty) {
       _activeId = '${_stored.first['id']}';
     }
     _ready = true;
+    if (_subscriptions.isNotEmpty) {
+      unawaited(syncAutoUpdateSubscriptions(trigger: 'startup'));
+    }
   }
 
   Future<void> _persist() async {
@@ -188,6 +217,121 @@ class SourceManager {
     await prefs.setString(_kSources, jsonEncode(_stored));
     await prefs.setString(_kActive, _activeId);
     await prefs.setString(_kSubscriptionUrl, _subscriptionUrl);
+    await prefs.setString(_kSubscriptions, jsonEncode(_subscriptions));
+  }
+
+  bool _migrateLegacySubscriptionData() {
+    if (_subscriptions.isNotEmpty || _subscriptionUrl.trim().isEmpty) {
+      return false;
+    }
+    final request = _SubscriptionRequest.parse(_subscriptionUrl);
+    final entry = _createSubscriptionEntry(
+      id: _newSubscriptionId(),
+      name: _defaultSubscriptionName(request.requestUrl),
+      originalUrl: request.originalUrl,
+      requestUrl: request.requestUrl,
+      enabled: true,
+      autoUpdate: false,
+    );
+    _subscriptions.add(entry);
+    for (final source in _stored) {
+      final sourceUrl = '${source['subscriptionUrl'] ?? ''}';
+      if (sourceUrl == request.requestUrl) {
+        source['subscriptionId'] = entry['id'];
+      }
+    }
+    LogService.instance.info('SourceSub', '已迁移旧版单订阅配置');
+    return true;
+  }
+
+  bool _backfillSourceSubscriptionIds() {
+    var changed = false;
+    for (final source in _stored) {
+      final currentId = '${source['subscriptionId'] ?? ''}';
+      if (currentId.isNotEmpty) continue;
+      final sourceUrl = '${source['subscriptionUrl'] ?? ''}';
+      if (sourceUrl.isEmpty) continue;
+      final idx = _subscriptions.indexWhere(
+        (item) => '${item['requestUrl'] ?? ''}' == sourceUrl,
+      );
+      if (idx < 0) continue;
+      source['subscriptionId'] = '${_subscriptions[idx]['id']}';
+      changed = true;
+    }
+    return changed;
+  }
+
+  Map<String, dynamic> _createSubscriptionEntry({
+    required String id,
+    required String name,
+    required String originalUrl,
+    required String requestUrl,
+    required bool enabled,
+    required bool autoUpdate,
+    String version = '',
+    String lastCheckedAt = '',
+    String lastUpdatedAt = '',
+    String lastError = '',
+  }) => <String, dynamic>{
+    'id': id,
+    'name': name,
+    'originalUrl': originalUrl,
+    'requestUrl': requestUrl,
+    'enabled': enabled,
+    'autoUpdate': autoUpdate,
+    'version': version,
+    'lastCheckedAt': lastCheckedAt,
+    'lastUpdatedAt': lastUpdatedAt,
+    'lastError': lastError,
+  };
+
+  String _newSubscriptionId() =>
+      DateTime.now().microsecondsSinceEpoch.toString();
+
+  String _defaultSubscriptionName(String url) {
+    final uri = Uri.tryParse(url);
+    final host = uri?.host.trim() ?? '';
+    return host.isNotEmpty ? host : '订阅源';
+  }
+
+  String _nowIso() => DateTime.now().toIso8601String();
+
+  SourceSubscriptionMeta _subscriptionMetaFromStored(
+    Map<String, dynamic> item,
+  ) {
+    final id = '${item['id'] ?? ''}';
+    return SourceSubscriptionMeta(
+      id: id,
+      name: '${item['name'] ?? ''}'.trim().isNotEmpty
+          ? '${item['name'] ?? ''}'.trim()
+          : _defaultSubscriptionName('${item['requestUrl'] ?? ''}'),
+      originalUrl: '${item['originalUrl'] ?? ''}',
+      requestUrl: '${item['requestUrl'] ?? ''}',
+      enabled: item['enabled'] != false,
+      autoUpdate: item['autoUpdate'] != false,
+      sourceCount: _stored
+          .where((source) => _sourceBelongsToSubscription(source, id))
+          .length,
+      version: '${item['version'] ?? ''}',
+      lastCheckedAt: '${item['lastCheckedAt'] ?? ''}',
+      lastUpdatedAt: '${item['lastUpdatedAt'] ?? ''}',
+      lastError: '${item['lastError'] ?? ''}',
+    );
+  }
+
+  bool _sourceBelongsToSubscription(
+    Map<String, dynamic> source,
+    String subscriptionId,
+  ) {
+    final directId = '${source['subscriptionId'] ?? ''}';
+    if (directId.isNotEmpty) return directId == subscriptionId;
+    final url = '${source['subscriptionUrl'] ?? ''}';
+    if (url.isEmpty) return false;
+    final index = _subscriptions.indexWhere(
+      (item) => '${item['id'] ?? ''}' == subscriptionId,
+    );
+    if (index < 0) return false;
+    return url == '${_subscriptions[index]['requestUrl'] ?? ''}';
   }
 
   // 注册到 JS 引擎(幂等)
@@ -307,6 +451,7 @@ class SourceManager {
     bool persist = true,
     Map<String, dynamic>? metaOverride,
     String subscriptionUrl = '',
+    String subscriptionId = '',
   }) async {
     final parsed = await JsEngine.instance.loadSource(code);
     final meta = {...parsed, ...?metaOverride};
@@ -322,6 +467,9 @@ class SourceManager {
       'loginConfigKey': '${meta['loginConfigKey'] ?? ''}',
       'code': code,
       'enabled': idx >= 0 ? _stored[idx]['enabled'] != false : true,
+      'subscriptionId': subscriptionId.isNotEmpty
+          ? subscriptionId
+          : (idx >= 0 ? '${_stored[idx]['subscriptionId'] ?? ''}' : ''),
       'subscriptionUrl': subscriptionUrl.isNotEmpty
           ? subscriptionUrl
           : (idx >= 0 ? '${_stored[idx]['subscriptionUrl'] ?? ''}' : ''),
@@ -355,13 +503,354 @@ class SourceManager {
 
   String get subscriptionUrl => _subscriptionUrl;
 
-  Future<SourceSubscriptionResult> syncSubscription(String url) async {
+  List<SourceSubscriptionMeta> getSubscriptions() =>
+      _subscriptions.map(_subscriptionMetaFromStored).toList(growable: false);
+
+  Future<SourceSubscriptionMeta> saveSubscription({
+    String id = '',
+    required String url,
+    String name = '',
+    bool enabled = true,
+    bool autoUpdate = true,
+  }) async {
     final request = _SubscriptionRequest.parse(url);
+    if (request.originalUrl.isEmpty) throw Exception('订阅地址为空');
+    var index = id.isNotEmpty
+        ? _subscriptions.indexWhere((item) => '${item['id']}' == id)
+        : -1;
+    index = index >= 0
+        ? index
+        : _subscriptions.indexWhere(
+            (item) => '${item['requestUrl']}' == request.requestUrl,
+          );
+    final previous = index >= 0
+        ? Map<String, dynamic>.from(_subscriptions[index])
+        : null;
+    final entry = _createSubscriptionEntry(
+      id: previous == null ? _newSubscriptionId() : '${previous['id']}',
+      name: name.trim().isNotEmpty
+          ? name.trim()
+          : (previous == null
+                ? _defaultSubscriptionName(request.requestUrl)
+                : '${previous['name'] ?? ''}'.trim().isNotEmpty
+                ? '${previous['name']}'.trim()
+                : _defaultSubscriptionName(request.requestUrl)),
+      originalUrl: request.originalUrl,
+      requestUrl: request.requestUrl,
+      enabled: previous == null ? enabled : previous['enabled'] != false,
+      autoUpdate: previous == null
+          ? autoUpdate
+          : previous['autoUpdate'] != false,
+      version: '${previous?['version'] ?? ''}',
+      lastCheckedAt: '${previous?['lastCheckedAt'] ?? ''}',
+      lastUpdatedAt: '${previous?['lastUpdatedAt'] ?? ''}',
+      lastError: '${previous?['lastError'] ?? ''}',
+    );
+    if (index >= 0) {
+      _subscriptions[index] = entry;
+    } else {
+      _subscriptions.add(entry);
+    }
+    _subscriptionUrl = request.originalUrl;
+    _rebindSubscriptionSources('${entry['id']}', request.requestUrl);
+    await _persist();
+    LogService.instance.info(
+      'SourceSub',
+      index >= 0 ? '订阅源已更新' : '订阅源已添加',
+      detail: '名称: ${entry['name']}\nURL: ${request.maskedUrl}',
+    );
+    return _subscriptionMetaFromStored(entry);
+  }
+
+  void _rebindSubscriptionSources(String subscriptionId, String requestUrl) {
+    for (final source in _stored) {
+      final sourceUrl = '${source['subscriptionUrl'] ?? ''}';
+      if (sourceUrl == requestUrl) {
+        source['subscriptionId'] = subscriptionId;
+      }
+    }
+  }
+
+  Future<void> setSubscriptionAutoUpdate(String id, bool enabled) async {
+    final idx = _subscriptions.indexWhere((item) => '${item['id']}' == id);
+    if (idx < 0) return;
+    _subscriptions[idx]['autoUpdate'] = enabled;
+    await _persist();
+    LogService.instance.info(
+      'SourceSub',
+      enabled ? '订阅自动更新已开启' : '订阅自动更新已关闭',
+      detail: '名称: ${_subscriptions[idx]['name']}\nID: $id',
+    );
+  }
+
+  Future<void> setSubscriptionEnabled(String id, bool enabled) async {
+    final idx = _subscriptions.indexWhere((item) => '${item['id']}' == id);
+    if (idx < 0) return;
+    _subscriptions[idx]['enabled'] = enabled;
+    await _persist();
+    LogService.instance.info(
+      'SourceSub',
+      enabled ? '订阅已启用' : '订阅已停用',
+      detail: '名称: ${_subscriptions[idx]['name']}\nID: $id',
+    );
+  }
+
+  Future<void> deleteSubscription(String id) async {
+    final idx = _subscriptions.indexWhere((item) => '${item['id']}' == id);
+    if (idx < 0) return;
+    final removed = Map<String, dynamic>.from(_subscriptions.removeAt(idx));
+    final removedSourceIds = <String>[];
+    _stored.removeWhere((source) {
+      final match = _sourceBelongsToSubscription(source, id);
+      if (match) {
+        removedSourceIds.add('${source['id']}');
+        _registered.remove('${source['id']}');
+      }
+      return match;
+    });
+    if (!_stored.any((source) => '${source['id']}' == _activeId)) {
+      _activeId = _firstEnabledId();
+    }
+    if (_subscriptions.isEmpty) {
+      _subscriptionUrl = '';
+    } else if (_subscriptionUrl == '${removed['originalUrl'] ?? ''}') {
+      _subscriptionUrl = '${_subscriptions.last['originalUrl'] ?? ''}';
+    }
+    await _persist();
+    LogService.instance.info(
+      'SourceSub',
+      '订阅源已删除',
+      detail:
+          '名称: ${removed['name']}\n删除音源: ${removedSourceIds.length}\nURL: ${_SubscriptionRequest.parse('${removed['originalUrl'] ?? ''}').maskedUrl}',
+    );
+  }
+
+  Future<SourceSubscriptionResult> syncSubscriptionById(String id) async {
+    final inflight = _syncingSubscriptions[id];
+    if (inflight != null) return inflight;
+    final idx = _subscriptions.indexWhere((item) => '${item['id']}' == id);
+    if (idx < 0) throw Exception('订阅不存在');
+    final future = _syncSubscriptionEntry(
+      Map<String, dynamic>.from(_subscriptions[idx]),
+    );
+    _syncingSubscriptions[id] = future;
+    try {
+      return await future;
+    } finally {
+      _syncingSubscriptions.remove(id);
+    }
+  }
+
+  Future<SourceSubscriptionResult> syncAutoUpdateSubscriptions({
+    String trigger = 'manual',
+  }) async {
+    final targets = _subscriptions
+        .where(
+          (item) => item['enabled'] != false && item['autoUpdate'] != false,
+        )
+        .map((item) => '${item['id']}')
+        .toList(growable: false);
+    if (targets.isEmpty) {
+      return const SourceSubscriptionResult(
+        added: 0,
+        updated: 0,
+        removed: 0,
+        total: 0,
+      );
+    }
+    LogService.instance.info(
+      'SourceSub',
+      '开始批量同步自动更新订阅',
+      detail: '触发: $trigger\n数量: ${targets.length}',
+    );
+    var added = 0;
+    var updated = 0;
+    var removed = 0;
+    for (final id in targets) {
+      try {
+        final check = await checkSubscriptionById(id);
+        if (!check.hasUpdate) continue;
+        final result = await syncSubscriptionById(id);
+        added += result.added;
+        updated += result.updated;
+        removed += result.removed;
+      } catch (e, stack) {
+        LogService.instance.error(
+          'SourceSub',
+          '自动更新订阅失败',
+          error: e,
+          stack: stack,
+        );
+      }
+    }
+    return SourceSubscriptionResult(
+      added: added,
+      updated: updated,
+      removed: removed,
+      total: _stored.length,
+    );
+  }
+
+  Future<SourceSubscriptionCheckResult> checkSubscriptionById(String id) async {
+    final idx = _subscriptions.indexWhere((item) => '${item['id']}' == id);
+    if (idx < 0) throw Exception('订阅不存在');
+    final subscription = Map<String, dynamic>.from(_subscriptions[idx]);
+    final payload = await _fetchSubscriptionPayload(subscription);
+    final remoteVersion = payload.version;
+    final currentVersion = '${_subscriptions[idx]['version'] ?? ''}';
+    final hasUpdate = remoteVersion.isNotEmpty
+        ? remoteVersion != currentVersion
+        : '${_subscriptions[idx]['lastUpdatedAt'] ?? ''}'.isEmpty;
+    _subscriptions[idx]['lastCheckedAt'] = _nowIso();
+    _subscriptions[idx]['lastError'] = '';
+    await _persist();
+    LogService.instance.info(
+      'SourceSub',
+      hasUpdate ? '检测到订阅更新' : '订阅已是最新版本',
+      detail:
+          '名称: ${subscription['name']}\n当前版本: ${currentVersion.isEmpty ? '未知' : currentVersion}\n远端版本: ${remoteVersion.isEmpty ? '未声明' : remoteVersion}',
+    );
+    return SourceSubscriptionCheckResult(
+      subscriptionId: id,
+      version: remoteVersion,
+      sourceCount: payload.rawSources.length,
+      hasUpdate: hasUpdate,
+    );
+  }
+
+  Future<SourceSubscriptionResult> _syncSubscriptionEntry(
+    Map<String, dynamic> subscription,
+  ) async {
+    final id = '${subscription['id'] ?? ''}';
+    final idx = _subscriptions.indexWhere((item) => '${item['id']}' == id);
+    if (idx < 0) throw Exception('订阅不存在');
+    _subscriptions[idx]['lastCheckedAt'] = _nowIso();
+    _subscriptions[idx]['lastError'] = '';
+    await _persist();
+    try {
+      final payload = await _fetchSubscriptionPayload(subscription);
+      final request = payload.request;
+      final rawSources = payload.rawSources;
+      final existingCount = _stored
+          .where((source) => _sourceBelongsToSubscription(source, id))
+          .length;
+      if (rawSources.isEmpty && existingCount > 0) {
+        LogService.instance.error(
+          'SourceSub',
+          '订阅返回空音源列表，已阻止覆盖本地音源',
+          error: Exception('订阅空列表保护'),
+        );
+        throw Exception('订阅返回空列表，已保留本地音源，避免误删');
+      }
+
+      final seenIds = <String>{};
+      var added = 0;
+      var updated = 0;
+      for (var i = 0; i < rawSources.length; i++) {
+        final item = rawSources[i];
+        if (item is! Map) throw Exception('sources[$i] 必须是对象');
+        final map = Map<String, dynamic>.from(item);
+        final code = await _resolveSubscriptionCode(request, map, i);
+        final metaOverride = <String, dynamic>{
+          for (final key in [
+            'id',
+            'name',
+            'apiVersion',
+            'configFields',
+            'loginUrl',
+            'loginConfigKey',
+          ])
+            if (map.containsKey(key)) key: map[key],
+        };
+        final existed = _stored.any(
+          (e) => '${e['id']}' == '${map['id'] ?? ''}',
+        );
+        final meta = await _addInternal(
+          code,
+          persist: false,
+          metaOverride: metaOverride.isEmpty ? null : metaOverride,
+          subscriptionUrl: request.requestUrl,
+          subscriptionId: id,
+        );
+        final sourceId = '${meta['id']}';
+        seenIds.add(sourceId);
+        final sourceIndex = _stored.indexWhere((e) => '${e['id']}' == sourceId);
+        if (sourceIndex >= 0 && map.containsKey('enabled')) {
+          _stored[sourceIndex]['enabled'] = map['enabled'] != false;
+        }
+        existed ? updated++ : added++;
+      }
+
+      if (seenIds.isEmpty && existingCount > 0) {
+        LogService.instance.error(
+          'SourceSub',
+          '订阅同步没有拿到任何有效音源，已阻止删除本地音源',
+          error: Exception('订阅无有效音源保护'),
+        );
+        throw Exception('订阅没有返回有效音源，已保留本地音源');
+      }
+
+      final removed = <String>[];
+      _stored.removeWhere((source) {
+        final sourceId = '${source['id']}';
+        final shouldRemove =
+            _sourceBelongsToSubscription(source, id) &&
+            !seenIds.contains(sourceId);
+        if (shouldRemove) {
+          removed.add(sourceId);
+          _registered.remove(sourceId);
+        }
+        return shouldRemove;
+      });
+      _subscriptionUrl = request.originalUrl;
+      _subscriptions[idx]['originalUrl'] = request.originalUrl;
+      _subscriptions[idx]['requestUrl'] = request.requestUrl;
+      _subscriptions[idx]['version'] = payload.version;
+      _subscriptions[idx]['lastUpdatedAt'] = _nowIso();
+      _subscriptions[idx]['lastError'] = '';
+      if (_activeId.isEmpty || !_stored.any((s) => '${s['id']}' == _activeId)) {
+        _activeId = _firstEnabledId();
+      }
+      await _persist();
+      LogService.instance.info(
+        'SourceSub',
+        '音源订阅同步完成',
+        detail:
+            '名称: ${subscription['name']}\n版本: ${payload.version.isEmpty ? '未声明' : payload.version}\n新增: $added\n更新: $updated\n删除: ${removed.length}\n总数: ${_stored.length}',
+      );
+      return SourceSubscriptionResult(
+        added: added,
+        updated: updated,
+        removed: removed.length,
+        total: _stored.length,
+      );
+    } catch (e, stack) {
+      _subscriptions[idx]['lastError'] = e.toString().replaceFirst(
+        'Exception: ',
+        '',
+      );
+      await _persist();
+      LogService.instance.error(
+        'SourceSub',
+        '音源订阅同步失败',
+        error: e,
+        stack: stack,
+      );
+      rethrow;
+    }
+  }
+
+  Future<_SubscriptionPayload> _fetchSubscriptionPayload(
+    Map<String, dynamic> subscription,
+  ) async {
+    final request = _SubscriptionRequest.parse(
+      '${subscription['originalUrl'] ?? ''}',
+    );
     if (request.originalUrl.isEmpty) throw Exception('订阅地址为空');
     LogService.instance.info(
       'SourceSub',
-      '开始同步音源订阅',
-      detail: 'URL: ${request.maskedUrl}',
+      '读取订阅源清单',
+      detail: '名称: ${subscription['name']}\nURL: ${request.maskedUrl}',
     );
     final resp = await _dio.get<String>(
       request.requestUrl,
@@ -381,71 +870,32 @@ class SourceManager {
         ? decoded
         : (decoded is Map ? decoded['sources'] : null);
     if (rawSources is! List) throw Exception('订阅格式错误:缺少 sources 数组');
-
-    final seenIds = <String>{};
-    var added = 0;
-    var updated = 0;
-    for (var i = 0; i < rawSources.length; i++) {
-      final item = rawSources[i];
-      if (item is! Map) throw Exception('sources[$i] 必须是对象');
-      final map = Map<String, dynamic>.from(item);
-      final code = await _resolveSubscriptionCode(request, map, i);
-      final metaOverride = <String, dynamic>{
-        for (final key in [
-          'id',
-          'name',
-          'apiVersion',
-          'configFields',
-          'loginUrl',
-          'loginConfigKey',
-        ])
-          if (map.containsKey(key)) key: map[key],
-      };
-      final existed = _stored.any((e) => '${e['id']}' == '${map['id'] ?? ''}');
-      final meta = await _addInternal(
-        code,
-        persist: false,
-        metaOverride: metaOverride.isEmpty ? null : metaOverride,
-        subscriptionUrl: request.requestUrl,
-      );
-      final id = '${meta['id']}';
-      seenIds.add(id);
-      final idx = _stored.indexWhere((e) => '${e['id']}' == id);
-      if (idx >= 0 && map.containsKey('enabled')) {
-        _stored[idx]['enabled'] = map['enabled'] != false;
-      }
-      existed ? updated++ : added++;
-    }
-
-    final removed = <String>[];
-    _stored.removeWhere((source) {
-      final id = '${source['id']}';
-      final shouldRemove =
-          '${source['subscriptionUrl'] ?? ''}' == request.requestUrl &&
-          !seenIds.contains(id);
-      if (shouldRemove) {
-        removed.add(id);
-        _registered.remove(id);
-      }
-      return shouldRemove;
-    });
-    _subscriptionUrl = request.originalUrl;
-    if (_activeId.isEmpty || !_stored.any((s) => '${s['id']}' == _activeId)) {
-      _activeId = _firstEnabledId();
-    }
-    await _persist();
-    LogService.instance.info(
-      'SourceSub',
-      '音源订阅同步完成',
-      detail:
-          '新增: $added\n更新: $updated\n删除: ${removed.length}\n总数: ${_stored.length}',
+    final version = _subscriptionVersionOf(decoded);
+    return _SubscriptionPayload(
+      request: request,
+      rawSources: rawSources,
+      version: version,
     );
-    return SourceSubscriptionResult(
-      added: added,
-      updated: updated,
-      removed: removed.length,
-      total: _stored.length,
-    );
+  }
+
+  String _subscriptionVersionOf(dynamic decoded) {
+    if (decoded is! Map) return '';
+    for (final key in [
+      'version',
+      'subscriptionVersion',
+      'sourceVersion',
+      'updatedAt',
+      'etag',
+    ]) {
+      final value = '${decoded[key] ?? ''}'.trim();
+      if (value.isNotEmpty) return value;
+    }
+    return '';
+  }
+
+  Future<SourceSubscriptionResult> syncSubscription(String url) async {
+    final subscription = await saveSubscription(url: url);
+    return syncSubscriptionById(subscription.id);
   }
 
   Future<String> _resolveSubscriptionCode(

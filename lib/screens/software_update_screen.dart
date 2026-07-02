@@ -287,6 +287,16 @@ class _SoftwareUpdateScreenState extends State<SoftwareUpdateScreen> {
                       color: cs.onSurfaceVariant,
                     ),
                   ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '内置加速线路 ${AppUpdateService.githubAccelerators.length} 条',
+                    style: TextStyle(color: cs.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 6),
+                  SelectableText(
+                    AppUpdateService.githubAccelerators.join('\n'),
+                    style: TextStyle(height: 1.35, color: cs.onSurfaceVariant),
+                  ),
                   if (remote.changelog.isNotEmpty) ...[
                     const SizedBox(height: 12),
                     const Text(

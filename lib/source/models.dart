@@ -254,3 +254,48 @@ class SourceMeta {
 
   bool get configurable => configFields.isNotEmpty;
 }
+
+class SourceSubscriptionMeta {
+  final String id;
+  final String name;
+  final String originalUrl;
+  final String requestUrl;
+  final bool enabled;
+  final bool autoUpdate;
+  final int sourceCount;
+  final String version;
+  final String lastCheckedAt;
+  final String lastUpdatedAt;
+  final String lastError;
+
+  const SourceSubscriptionMeta({
+    required this.id,
+    required this.name,
+    required this.originalUrl,
+    required this.requestUrl,
+    required this.enabled,
+    required this.autoUpdate,
+    required this.sourceCount,
+    required this.version,
+    required this.lastCheckedAt,
+    required this.lastUpdatedAt,
+    required this.lastError,
+  });
+
+  bool get hasSuccess => lastUpdatedAt.isNotEmpty;
+  bool get hasError => lastError.isNotEmpty;
+}
+
+class SourceSubscriptionCheckResult {
+  final String subscriptionId;
+  final String version;
+  final int sourceCount;
+  final bool hasUpdate;
+
+  const SourceSubscriptionCheckResult({
+    required this.subscriptionId,
+    required this.version,
+    required this.sourceCount,
+    required this.hasUpdate,
+  });
+}

@@ -54,6 +54,15 @@ class AppUpdateService {
   AppUpdateService._();
   static final instance = AppUpdateService._();
 
+  static const List<String> githubAccelerators = [
+    'https://ghfast.top/',
+    'https://gh-proxy.com/',
+    'https://github.chenc.dev/',
+    'https://github.mxw.qzz.io/',
+    'https://tvv.tw/',
+    'https://gh.927223.xyz/',
+  ];
+
   static const MethodChannel _channel = MethodChannel('tingshu/app_update');
   final Dio _dio = Dio();
 
@@ -74,13 +83,7 @@ class AppUpdateService {
     final normalized = manifestUrl.trim();
     if (normalized.isEmpty) throw Exception('更新清单地址为空');
     LogService.instance.info('Update', '开始检查软件更新', detail: '清单: $normalized');
-    final response = await _dio.get(
-      normalized,
-      options: Options(
-        responseType: ResponseType.plain,
-        receiveTimeout: const Duration(seconds: 15),
-      ),
-    );
+    final response = await _fetchManifest(normalized);
     final raw = response.data;
     final dynamic data;
     if (raw is String) {
@@ -105,10 +108,11 @@ class AppUpdateService {
       _ =>
         (map['downloadUrls'] is List) ? map['downloadUrls'] as List : const [],
     };
-    final urls = rawUrls
-        .map((value) => _resolveUrl(normalized, '$value'))
-        .where((value) => value.isNotEmpty)
-        .toList(growable: false);
+    final urls = _expandUrls(
+      rawUrls
+          .map((value) => _resolveUrl(normalized, '$value'))
+          .where((value) => value.isNotEmpty),
+    );
     if (versionName.isEmpty || versionCode <= 0) {
       throw Exception('更新清单缺少有效版本号');
     }
@@ -128,7 +132,7 @@ class AppUpdateService {
       'Update',
       '软件更新清单解析完成',
       detail:
-          '版本: ${info.versionName} (${info.versionCode})\n地址数: ${info.urls.length}\n强制更新: ${info.force ? '是' : '否'}',
+          '版本: ${info.versionName} (${info.versionCode})\n地址数: ${info.urls.length}\n内置加速线路:\n${githubAccelerators.join('\n')}\n强制更新: ${info.force ? '是' : '否'}',
     );
     return info;
   }
@@ -226,6 +230,37 @@ class AppUpdateService {
     return dir;
   }
 
+  Future<Response<dynamic>> _fetchManifest(String manifestUrl) async {
+    final urls = _expandUrls([manifestUrl]);
+    Object? lastError;
+    for (var i = 0; i < urls.length; i++) {
+      final url = urls[i];
+      try {
+        LogService.instance.info(
+          'Update',
+          '尝试读取更新清单',
+          detail: '线路: ${i + 1}/${urls.length}\nURL: $url',
+        );
+        return await _dio.get(
+          url,
+          options: Options(
+            responseType: ResponseType.plain,
+            receiveTimeout: const Duration(seconds: 15),
+          ),
+        );
+      } catch (e, stack) {
+        lastError = e;
+        LogService.instance.error(
+          'Update',
+          '更新清单读取失败，尝试下一线路',
+          error: e,
+          stack: stack,
+        );
+      }
+    }
+    throw Exception('全部更新清单线路读取失败: ${lastError ?? '未知错误'}');
+  }
+
   String _resolveUrl(String manifestUrl, String raw) {
     final trimmed = raw.trim();
     if (trimmed.isEmpty) return '';
@@ -234,5 +269,40 @@ class AppUpdateService {
     final base = Uri.tryParse(manifestUrl);
     if (base == null) return trimmed;
     return base.resolve(trimmed).toString();
+  }
+
+  List<String> _expandUrls(Iterable<String> urls) {
+    final result = <String>[];
+    final seen = <String>{};
+    for (final raw in urls) {
+      final trimmed = raw.trim();
+      if (trimmed.isEmpty) continue;
+      final expanded = _githubAcceleratedUrls(trimmed);
+      for (final url in expanded) {
+        if (seen.add(url)) result.add(url);
+      }
+    }
+    return result;
+  }
+
+  List<String> _githubAcceleratedUrls(String url) {
+    if (!_canAccelerateGithubUrl(url)) return [url];
+    return [
+      for (final accelerator in githubAccelerators)
+        _joinProxyUrl(accelerator, url),
+      url,
+    ];
+  }
+
+  bool _canAccelerateGithubUrl(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null || !uri.hasScheme) return false;
+    final host = uri.host.toLowerCase();
+    return host == 'github.com' || host == 'raw.githubusercontent.com';
+  }
+
+  String _joinProxyUrl(String proxy, String url) {
+    final normalizedProxy = proxy.endsWith('/') ? proxy : '$proxy/';
+    return '$normalizedProxy$url';
   }
 }

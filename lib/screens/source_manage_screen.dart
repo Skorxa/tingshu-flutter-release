@@ -9,6 +9,7 @@ import '../source/models.dart';
 import '../source/source_debug_runner.dart';
 import '../source/source_manager.dart';
 import 'runtime_log_screen.dart';
+import 'subscription_manage_screen.dart';
 import 'source_config_screen.dart';
 
 class SourceManageScreen extends StatefulWidget {
@@ -176,29 +177,6 @@ class _SourceManageScreenState extends State<SourceManageScreen> {
         initialText: initialText,
       ),
     );
-  }
-
-  Future<void> _syncSubscription() async {
-    final url = await _singleInputDialog(
-      title: '音源订阅',
-      hintText: '输入订阅 JSON 链接',
-      confirmText: '同步',
-      initialText: SourceManager.instance.subscriptionUrl,
-    );
-    if (url == null || url.trim().isEmpty) return;
-    setState(() => _loading = true);
-    try {
-      final result = await SourceManager.instance.syncSubscription(url.trim());
-      _refresh();
-      _toast(
-        '订阅同步完成：新增 ${result.added}，更新 ${result.updated}，删除 ${result.removed}',
-      );
-    } catch (e) {
-      LogService.instance.error('SourceSub', '音源订阅同步失败', error: e);
-      _toast(e.toString().replaceFirst('Exception: ', ''));
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
   }
 
   Future<void> _delete(SourceMeta source) async {
@@ -534,16 +512,26 @@ class _SourceManageScreenState extends State<SourceManageScreen> {
             child: SizedBox(
               width: double.infinity,
               child: FilledButton.tonalIcon(
-                onPressed: _loading ? null : _syncSubscription,
+                onPressed: _loading
+                    ? null
+                    : () async {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const SubscriptionManageScreen(),
+                          ),
+                        );
+                        _refresh();
+                      },
                 icon: const Icon(Icons.cloud_sync_outlined),
-                label: const Text('同步订阅源'),
+                label: const Text('订阅源管理'),
               ),
             ),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
             child: Text(
-              '推荐使用订阅源同步;本地导入会调起系统文件管理器选择 .js 音源文件,也可用右上角粘贴文本导入。',
+              '推荐在订阅源管理里维护远端订阅;本地导入会调起系统文件管理器选择 .js 音源文件,也可用右上角粘贴文本导入。',
               style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
             ),
           ),
@@ -562,7 +550,7 @@ class _SourceManageScreenState extends State<SourceManageScreen> {
                     ),
                     child: Center(
                       child: Text(
-                        '暂无音源,可以先同步订阅源',
+                        '暂无音源,可以先到订阅源管理里添加订阅',
                         style: TextStyle(color: cs.onSurfaceVariant),
                       ),
                     ),

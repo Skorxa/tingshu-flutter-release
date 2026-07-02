@@ -62,5 +62,7 @@ anr_*.txt
 /android/build/
 /android/app/build/
 /android/.gradle/
+/android/key.properties
+/android/app/upload-keystore.jks
 # Claude Code 本地设置 (保留 .claude/skills 入版本)
 .claude/settings.local.json
