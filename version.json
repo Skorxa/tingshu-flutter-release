@@ -1,12 +1,12 @@
 {
-  "versionName": "1.1.2",
-  "versionCode": 2,
+  "versionName": "1.1.3",
+  "versionCode": 3,
   "force": false,
-  "changelog": "自动构建发布链路测试",
-  "sha256": "3e68c4b7f48501e30226c8c704ebdff2bb66b6d9802fae48629a49dd865597d0",
-  "size": 25627018,
-  "publishedAt": "2026-07-02T08:00:06Z",
+  "changelog": "取消内置音源，改为订阅源同步；统一应用名称为橘听。",
+  "sha256": "00d199225a607582af97e94cc4393fe45703b8f930c399581852e9da0641ddf1",
+  "size": 25631867,
+  "publishedAt": "2026-07-02T08:51:27Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.1.2/tingshu-1.1.2-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.1.3/tingshu-1.1.3-arm64.apk"
   ]
 }
