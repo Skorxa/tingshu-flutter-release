@@ -1,12 +1,12 @@
 {
-  "versionName": "1.1.4",
-  "versionCode": 4,
+  "versionName": "1.1.5",
+  "versionCode": 5,
   "force": false,
-  "changelog": "新增私有 GitHub 音源订阅支持，可通过 #token= 方式同步私有仓库音源。",
-  "sha256": "5f4faa9ce52aa0c7466711e4849568d18363c2e595bc6930d2396995fdfc80ec",
-  "size": 25631867,
-  "publishedAt": "2026-07-02T09:09:58Z",
+  "changelog": "自动构建版本 1.1.5",
+  "sha256": "c233d4e48a7c883a916521789c042e28f4e66c47fc798beae78c9d5152bb77e0",
+  "size": 25763107,
+  "publishedAt": "2026-07-02T11:28:27Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.1.4/tingshu-1.1.4-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.1.5/tingshu-1.1.5-arm64.apk"
   ]
 }
