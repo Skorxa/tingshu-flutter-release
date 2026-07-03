@@ -467,48 +467,114 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget _bookCell(_SearchHit hit) {
     final cs = Theme.of(context).colorScheme;
     final b = hit.book;
-    return ListTile(
-      leading: ClipRRect(
-        borderRadius: BorderRadius.circular(6),
-        child: b.cover.isNotEmpty
-            ? CoverImage(
-                cover: b.cover,
-                width: 44,
-                height: 44,
-                fit: BoxFit.cover,
-                fallback: _coverFallback(cs),
-              )
-            : _coverFallback(cs),
-      ),
-      title: _ScrollingTitle(b.title, style: const TextStyle(fontSize: 16)),
-      subtitle: b.author.isEmpty
-          ? null
-          : Text(b.author, maxLines: 1, overflow: TextOverflow.ellipsis),
-      trailing: Container(
-        constraints: const BoxConstraints(maxWidth: 84),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: cs.primaryContainer,
-          borderRadius: BorderRadius.circular(6),
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: InkWell(
+        onTap: () => _openBook(hit),
+        onLongPress: () => _showBookMenu(hit),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              // 封面
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: b.cover.isNotEmpty
+                    ? CoverImage(
+                        cover: b.cover,
+                        width: 56,
+                        height: 56,
+                        fit: BoxFit.cover,
+                        fallback: _coverFallback(cs),
+                      )
+                    : _coverFallback(cs),
+              ),
+              const SizedBox(width: 12),
+              // 信息
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      b.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        height: 1.3,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    if (b.author.isNotEmpty)
+                      Text(
+                        b.author,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: cs.secondaryContainer,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            hit.source.name,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: cs.onSecondaryContainer,
+                            ),
+                          ),
+                        ),
+                        if (b.intro.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              b.intro,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
-        child: Text(
-          hit.source.name,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(fontSize: 11, color: cs.onPrimaryContainer),
-        ),
       ),
-      onTap: () => _openBook(hit),
-      onLongPress: () => _showBookMenu(hit),
     );
   }
 
-  Widget _coverFallback(ColorScheme cs) => Container(
-    width: 44,
-    height: 44,
-    color: cs.surfaceContainerHighest,
-    child: Icon(Icons.menu_book, color: cs.onSurfaceVariant, size: 22),
-  );
+  Widget _coverFallback(ColorScheme cs) {
+    return Container(
+      width: 56,
+      height: 56,
+      color: cs.surfaceContainerHighest,
+      child: Icon(
+        Icons.book_outlined,
+        color: cs.onSurfaceVariant,
+        size: 28,
+      ),
+    );
+  }
 
   Widget _empty({
     required IconData icon,
