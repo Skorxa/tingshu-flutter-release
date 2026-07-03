@@ -641,7 +641,7 @@ class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
                   },
                   child: ListView.builder(
                     controller: _scrollController,
-                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
                     itemCount: _chapters.length + 1,
                     itemBuilder: (context, index) {
                       if (index == _chapters.length) {
@@ -728,47 +728,67 @@ class _ChapterTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Stack(
-      children: [
-        ListTile(
-          selected: selected,
-          selectedTileColor: cs.primary.withValues(alpha: 0.08),
-          leading: SizedBox(
-            width: 42,
-            child: Text(
-              '${chapter.index == 0 ? index + 1 : chapter.index}',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: selected ? cs.primary : cs.onSurfaceVariant,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.normal,
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Card(
+        margin: EdgeInsets.zero,
+        child: Stack(
+          children: [
+            ListTile(
+              selected: selected,
+              selectedTileColor: cs.primaryContainer.withValues(alpha: 0.3),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
               ),
+              leading: Container(
+                width: 42,
+                alignment: Alignment.center,
+                child: Text(
+                  '${chapter.index == 0 ? index + 1 : chapter.index}',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: selected ? cs.primary : cs.onSurfaceVariant,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  ),
+                ),
+              ),
+              title: Text(
+                chapter.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 15,
+                  color: selected ? cs.primary : null,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                ),
+              ),
+              trailing: selected
+                  ? Icon(Icons.volume_up, color: cs.primary, size: 22)
+                  : const SizedBox(width: 22),
+              onTap: onTap,
             ),
-          ),
-          title: Text(
-            chapter.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: selected ? cs.primary : null,
-              fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-            ),
-          ),
-          trailing: selected
-              ? Icon(Icons.volume_up, color: cs.primary, size: 20)
-              : const SizedBox(width: 20),
-          onTap: onTap,
+            if (cached)
+              Positioned(
+                right: 14,
+                bottom: 6,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: cs.tertiaryContainer,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    '已缓存',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: cs.onTertiaryContainer,
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
-        if (cached)
-          const Positioned(
-            right: 14,
-            bottom: 6,
-            child: Icon(
-              Icons.download_done,
-              size: 15,
-              color: Color(0xFF16A34A),
-            ),
-          ),
-      ],
+      ),
     );
   }
 }
