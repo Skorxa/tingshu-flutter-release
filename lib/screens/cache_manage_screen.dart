@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../data/cache_service.dart';
 import '../data/settings_service.dart';
-import '../widgets/cover_image.dart';
 
 class CacheManageScreen extends StatefulWidget {
   const CacheManageScreen({super.key});
