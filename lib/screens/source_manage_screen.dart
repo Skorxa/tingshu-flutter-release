@@ -556,7 +556,7 @@ class _SourceManageScreenState extends State<SourceManageScreen> {
                     ),
                   )
                 : ReorderableListView.builder(
-                    padding: const EdgeInsets.only(bottom: 24),
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
                     itemCount: _sources.length,
                     onReorderItem: _reorderSources,
                     buildDefaultDragHandles: false,
@@ -568,64 +568,132 @@ class _SourceManageScreenState extends State<SourceManageScreen> {
                     ),
                     itemBuilder: (context, index) {
                       final s = _sources[index];
-                      return ListTile(
+                      return Card(
                         key: ValueKey(s.id),
-                        leading: ReorderableDragStartListener(
-                          index: index,
-                          child: Icon(
-                            Icons.drag_indicator,
-                            color: cs.onSurfaceVariant,
+                        margin: const EdgeInsets.only(bottom: 12),
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 4,
                           ),
-                        ),
-                        title: Row(
-                          children: [
-                            Icon(
-                              s.active
-                                  ? Icons.radio_button_checked
-                                  : Icons.radio_button_unchecked,
-                              size: 18,
-                              color: s.active
-                                  ? cs.primary
-                                  : cs.onSurfaceVariant,
+                          leading: ReorderableDragStartListener(
+                            index: index,
+                            child: Icon(
+                              Icons.drag_indicator,
+                              color: cs.onSurfaceVariant,
                             ),
-                            const SizedBox(width: 8),
-                            Expanded(child: Text(s.name)),
-                          ],
-                        ),
-                        subtitle: Text(
-                          '${s.active ? '当前使用 · ' : ''}${s.enabled ? '已开启' : '已关闭'} · 协议 v${s.apiVersion} · ${s.id}',
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Switch(
-                              value: s.enabled,
-                              onChanged: (v) async {
-                                await SourceManager.instance.setEnabled(
-                                  s.id,
-                                  v,
-                                );
-                                _refresh();
-                              },
-                            ),
-                            IconButton(
-                              icon: Icon(
-                                Icons.more_vert,
-                                color: cs.onSurfaceVariant,
+                          ),
+                          title: Row(
+                            children: [
+                              Icon(
+                                s.active
+                                    ? Icons.radio_button_checked
+                                    : Icons.radio_button_unchecked,
+                                size: 18,
+                                color: s.active
+                                    ? cs.primary
+                                    : cs.onSurfaceVariant,
                               ),
-                              tooltip: '更多',
-                              onPressed: () => _showSourceMenu(s),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  s.name,
+                                  style: TextStyle(
+                                    fontWeight: s.active
+                                        ? FontWeight.w600
+                                        : FontWeight.normal,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          subtitle: Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Wrap(
+                              spacing: 6,
+                              runSpacing: 4,
+                              children: [
+                                if (s.active)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: cs.primaryContainer,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      '当前',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: cs.onPrimaryContainer,
+                                      ),
+                                    ),
+                                  ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: s.enabled
+                                        ? cs.secondaryContainer
+                                        : cs.surfaceContainerHighest,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    s.enabled ? '已开启' : '已关闭',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: s.enabled
+                                          ? cs.onSecondaryContainer
+                                          : cs.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  'v${s.apiVersion} · ${s.id}',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Switch(
+                                value: s.enabled,
+                                onChanged: (v) async {
+                                  await SourceManager.instance.setEnabled(
+                                    s.id,
+                                    v,
+                                  );
+                                  _refresh();
+                                },
+                              ),
+                              IconButton(
+                                icon: Icon(
+                                  Icons.more_vert,
+                                  color: cs.onSurfaceVariant,
+                                ),
+                                tooltip: '更多',
+                                onPressed: () => _showSourceMenu(s),
+                              ),
+                            ],
+                          ),
+                          onTap: () async {
+                            if (!s.enabled) {
+                              _toast('请先开启音源');
+                              return;
+                            }
+                            await SourceManager.instance.setActive(s.id);
+                            _refresh();
+                          },
                         ),
-                        onTap: () async {
-                          if (!s.enabled) {
-                            _toast('请先开启音源');
-                            return;
-                          }
-                          await SourceManager.instance.setActive(s.id);
-                          _refresh();
-                        },
                       );
                     },
                   ),
