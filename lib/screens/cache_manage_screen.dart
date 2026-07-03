@@ -289,130 +289,231 @@ class _CacheManageScreenState extends State<CacheManageScreen> {
       ),
       body: AnimatedBuilder(
         animation: settings,
-        builder: (context, _) => ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-          children: [
-            _summaryCard(cs, snapshot),
-            const SizedBox(height: 16),
-            _sectionTitle(context, '自动缓存'),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.download_for_offline_outlined),
-              title: const Text('自动缓存后续章节'),
-              subtitle: const Text('播放时从当前集往后缓存'),
-              trailing: Switch(
-                value: settings.autoCache,
-                onChanged: settings.setAutoCache,
-              ),
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.format_list_numbered),
-              title: const Text('每本书最大缓存集数'),
-              subtitle: const Text('按当前正在播放的集数往后计算'),
-              trailing: Text(
-                '${settings.maxCacheChapters} 集',
-                style: TextStyle(color: cs.onSurfaceVariant),
-              ),
-              onTap: () => _chooseInt(
-                title: '每本书最大缓存集数',
-                current: settings.maxCacheChapters,
-                options: SettingsService.cacheChapterOptions,
-                label: (v) => '$v 集',
-                onSelected: settings.setMaxCacheChapters,
-              ),
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.schedule),
-              title: const Text('缓存频率'),
-              subtitle: const Text('自动缓存任务检查间隔'),
-              trailing: Text(
-                settings.cacheFrequencyLabel,
-                style: TextStyle(color: cs.onSurfaceVariant),
-              ),
-              onTap: () => _chooseFrequency(settings),
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.cleaning_services_outlined),
-              title: const Text('自动清理缓存文件'),
-              subtitle: const Text('超过指定数量后从最老缓存开始清理'),
-              trailing: Text(
-                settings.cleanupLimitLabel,
-                style: TextStyle(color: cs.onSurfaceVariant),
-              ),
-              onTap: () => _chooseInt(
-                title: '自动清理缓存文件',
-                current: settings.cleanupLimit,
-                options: SettingsService.cleanupLimitOptions,
-                label: (v) => v == 0 ? '不清理' : '$v 集',
-                onSelected: settings.setCleanupLimit,
-              ),
-            ),
-            const SizedBox(height: 12),
-            _sectionTitle(context, '缓存内容'),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                FilledButton.tonalIcon(
-                  onPressed: snapshot == null || snapshot.totalFiles == 0
-                      ? null
-                      : () => _setAllSelected(!allSelected),
-                  icon: Icon(
-                    allSelected
-                        ? Icons.check_box_outline_blank
-                        : Icons.select_all,
-                  ),
-                  label: Text(allSelected ? '取消全选' : '全选'),
+        builder: (context, _) => CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _summaryCard(cs, snapshot),
+                    const SizedBox(height: 16),
+                    _buildSettingsSection(context, settings, cs),
+                    const SizedBox(height: 16),
+                    _buildActionsSection(context, cs, snapshot, allSelected),
+                  ],
                 ),
-                OutlinedButton.icon(
-                  onPressed: _selectedKeys.isEmpty
-                      ? null
-                      : () => setState(() => _selectedKeys.clear()),
-                  icon: const Icon(Icons.deselect),
-                  label: const Text('清空选择'),
-                ),
-                FilledButton.icon(
-                  onPressed: _selectedKeys.isEmpty ? null : _deleteSelected,
-                  icon: const Icon(Icons.delete_outline),
-                  label: Text('删除选中 (${_selectedKeys.length})'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: snapshot == null || snapshot.totalFiles == 0
-                      ? null
-                      : _clearAll,
-                  icon: const Icon(Icons.delete_sweep_outlined),
-                  label: const Text('卸载全部'),
-                ),
-              ],
+              ),
             ),
-            const SizedBox(height: 12),
             if (_loading)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 48),
+              const SliverFillRemaining(
+                hasScrollBody: false,
                 child: Center(child: CircularProgressIndicator()),
               )
             else if (_error != null)
-              _emptyState(
-                context,
-                icon: Icons.error_outline,
-                title: '缓存读取失败',
-                subtitle: _error!,
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: _emptyState(
+                  context,
+                  icon: Icons.error_outline,
+                  title: '缓存读取失败',
+                  subtitle: _error!,
+                ),
               )
             else if (snapshot == null || snapshot.books.isEmpty)
-              _emptyState(
-                context,
-                icon: Icons.folder_off_outlined,
-                title: '暂无音频缓存',
-                subtitle: '自动缓存或手动缓存后的章节会出现在这里',
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: _emptyState(
+                  context,
+                  icon: Icons.folder_off_outlined,
+                  title: '暂无音频缓存',
+                  subtitle: '自动缓存或手动缓存后的章节会出现在这里',
+                ),
               )
             else
-              ...snapshot.books.map((book) => _bookTile(context, book)),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) => _bookTile(context, snapshot.books[index]),
+                    childCount: snapshot.books.length,
+                  ),
+                ),
+              ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildSettingsSection(
+    BuildContext context,
+    SettingsService settings,
+    ColorScheme cs,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cs.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.settings_outlined, size: 20, color: cs.primary),
+              const SizedBox(width: 8),
+              Text(
+                '自动缓存设置',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: cs.primary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _settingRow(
+            icon: Icons.download_for_offline_outlined,
+            title: '自动缓存后续章节',
+            subtitle: '播放时从当前集往后缓存',
+            trailing: Switch(
+              value: settings.autoCache,
+              onChanged: settings.setAutoCache,
+            ),
+          ),
+          const Divider(height: 24, indent: 40),
+          _settingRow(
+            icon: Icons.format_list_numbered,
+            title: '每本书最大缓存集数',
+            subtitle: '${settings.maxCacheChapters} 集',
+            trailing: const Icon(Icons.chevron_right, size: 20),
+            onTap: () => _chooseInt(
+              title: '每本书最大缓存集数',
+              current: settings.maxCacheChapters,
+              options: SettingsService.cacheChapterOptions,
+              label: (v) => '$v 集',
+              onSelected: settings.setMaxCacheChapters,
+            ),
+          ),
+          const Divider(height: 24, indent: 40),
+          _settingRow(
+            icon: Icons.schedule,
+            title: '缓存频率',
+            subtitle: settings.cacheFrequencyLabel,
+            trailing: const Icon(Icons.chevron_right, size: 20),
+            onTap: () => _chooseFrequency(settings),
+          ),
+          const Divider(height: 24, indent: 40),
+          _settingRow(
+            icon: Icons.cleaning_services_outlined,
+            title: '自动清理缓存',
+            subtitle: settings.cleanupLimitLabel,
+            trailing: const Icon(Icons.chevron_right, size: 20),
+            onTap: () => _chooseInt(
+              title: '自动清理缓存文件',
+              current: settings.cleanupLimit,
+              options: SettingsService.cleanupLimitOptions,
+              label: (v) => v == 0 ? '不清理' : '$v 集',
+              onSelected: settings.setCleanupLimit,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _settingRow({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    Widget? trailing,
+    VoidCallback? onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        child: Row(
+          children: [
+            Icon(icon, size: 22),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(fontSize: 14)),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (trailing != null) trailing,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionsSection(
+    BuildContext context,
+    ColorScheme cs,
+    CacheLibrarySnapshot? snapshot,
+    bool allSelected,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionTitle(context, '缓存内容'),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            FilledButton.tonalIcon(
+              onPressed: snapshot == null || snapshot.totalFiles == 0
+                  ? null
+                  : () => _setAllSelected(!allSelected),
+              icon: Icon(
+                allSelected
+                    ? Icons.check_box_outline_blank
+                    : Icons.select_all,
+              ),
+              label: Text(allSelected ? '取消全选' : '全选'),
+            ),
+            OutlinedButton.icon(
+              onPressed: _selectedKeys.isEmpty
+                  ? null
+                  : () => setState(() => _selectedKeys.clear()),
+              icon: const Icon(Icons.deselect),
+              label: const Text('清空选择'),
+            ),
+            FilledButton.icon(
+              onPressed: _selectedKeys.isEmpty ? null : _deleteSelected,
+              icon: const Icon(Icons.delete_outline),
+              label: Text('删除选中 (${_selectedKeys.length})'),
+            ),
+            OutlinedButton.icon(
+              onPressed: snapshot == null || snapshot.totalFiles == 0
+                  ? null
+                  : _clearAll,
+              icon: const Icon(Icons.delete_sweep_outlined),
+              label: const Text('卸载全部'),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -466,45 +567,22 @@ class _CacheManageScreenState extends State<CacheManageScreen> {
   Widget _bookTile(BuildContext context, CachedAudioBook book) {
     final cs = Theme.of(context).colorScheme;
     final expanded = _expandedBooks.contains(book.key);
-    return Container(
+    return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: cs.outlineVariant),
-      ),
       child: Column(
         children: [
           InkWell(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
             onTap: () => _toggleBookExpanded(book),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
             child: Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(16),
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Checkbox(
                     tristate: true,
                     value: _bookSelectionValue(book),
                     onChanged: (value) =>
                         _toggleBookSelection(book, value ?? false),
-                  ),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: CoverImage(
-                      cover: book.cover,
-                      width: 46,
-                      height: 46,
-                      fallback: Container(
-                        width: 46,
-                        height: 46,
-                        color: cs.surfaceContainerHighest,
-                        child: Icon(
-                          Icons.book_outlined,
-                          color: cs.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -517,31 +595,52 @@ class _CacheManageScreenState extends State<CacheManageScreen> {
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             fontSize: 15,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w600,
                           ),
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: cs.secondaryContainer,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                book.sourceName,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: cs.onSecondaryContainer,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              '${book.entries.length} 集 · ${_formatBytes(book.totalBytes)}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '${book.sourceName} · ${book.entries.length} 集 · ${_formatBytes(book.totalBytes)}',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: cs.onSurfaceVariant,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
                           '最近缓存 ${_formatTime(book.latestCachedAt)}',
                           style: TextStyle(
-                            fontSize: 12,
-                            color: cs.onSurfaceVariant,
+                            fontSize: 11,
+                            color: cs.onSurfaceVariant.withValues(alpha: 0.7),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: 8),
                   Icon(
                     expanded ? Icons.expand_less : Icons.expand_more,
                     color: cs.onSurfaceVariant,
@@ -565,16 +664,17 @@ class _CacheManageScreenState extends State<CacheManageScreen> {
       value: _selectedKeys.contains(entry.key),
       onChanged: (value) => _toggleEntrySelection(entry, value ?? false),
       dense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
       controlAffinity: ListTileControlAffinity.leading,
       title: Text(
-        '第 ${entry.chapterIdx + 1} 集  ${entry.chapterName.isEmpty ? entry.chapterId : entry.chapterName}',
-        maxLines: 2,
+        entry.chapterName.isEmpty ? entry.chapterId : entry.chapterName,
+        maxLines: 1,
         overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontSize: 14),
       ),
       subtitle: Text(
-        '${_formatBytes(entry.size)} · ${_formatTime(entry.cachedAt)}',
-        style: TextStyle(color: cs.onSurfaceVariant),
+        '第 ${entry.chapterIdx + 1} 集 · ${_formatBytes(entry.size)}',
+        style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
       ),
     );
   }
