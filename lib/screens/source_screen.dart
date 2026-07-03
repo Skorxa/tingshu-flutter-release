@@ -65,153 +65,261 @@ class _SourceScreenState extends State<SourceScreen> {
     final settings = SettingsService.instance;
     final cs = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(title: const Text('设置')),
-      body: AnimatedBuilder(
-        animation: settings,
-        builder: (context, _) => ListView(
-          children: [
-            const _ListeningStatsCard(),
-            _sectionTitle('通用'),
-            ListTile(
-              leading: const Icon(Icons.dark_mode_outlined),
-              title: const Text('夜间模式'),
-              subtitle: const Text('切换深色界面'),
-              trailing: Switch(
-                value: settings.darkMode,
-                onChanged: settings.setDarkMode,
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar.large(
+            title: const Text('设置'),
+            expandedHeight: 120,
+          ),
+          SliverToBoxAdapter(
+            child: AnimatedBuilder(
+              animation: settings,
+              builder: (context, _) => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const _ListeningStatsCard(),
+
+                  // 外观
+                  _buildSection(
+                    title: '外观',
+                    icon: Icons.palette_outlined,
+                    children: [
+                      _buildSwitchTile(
+                        icon: Icons.dark_mode_outlined,
+                        title: '夜间模式',
+                        subtitle: '深色主题界面',
+                        value: settings.darkMode,
+                        onChanged: settings.setDarkMode,
+                      ),
+                      const Divider(height: 1, indent: 56),
+                      _buildSwitchTile(
+                        icon: Icons.palette_outlined,
+                        title: '动态取色',
+                        subtitle: '使用封面生成 Material 3 配色',
+                        value: settings.dynamicColor,
+                        onChanged: settings.setDynamicColor,
+                      ),
+                    ],
+                  ),
+
+                  // 搜索
+                  _buildSection(
+                    title: '搜索',
+                    icon: Icons.search,
+                    children: [
+                      _buildSwitchTile(
+                        icon: Icons.travel_explore,
+                        title: '聚合搜索',
+                        subtitle: '一次搜索全部已启用音源',
+                        value: settings.aggregateSearch,
+                        onChanged: settings.setAggregateSearch,
+                      ),
+                      const Divider(height: 1, indent: 56),
+                      ListTile(
+                        leading: const Icon(Icons.manage_search),
+                        title: const Text('搜索匹配方式'),
+                        subtitle: const Text('精确搜索只保留书名完全匹配的结果'),
+                        trailing: Text(
+                          settings.searchMatchModeLabel,
+                          style: TextStyle(color: cs.onSurfaceVariant),
+                        ),
+                        onTap: () => _chooseSearchMatchMode(settings),
+                      ),
+                    ],
+                  ),
+
+                  // 播放
+                  _buildSection(
+                    title: '播放',
+                    icon: Icons.play_circle_outline,
+                    children: [
+                      _buildSwitchTile(
+                        icon: Icons.battery_saver_outlined,
+                        title: 'Android 音频卸载',
+                        subtitle: '降低功耗，下次加载音频生效',
+                        value: settings.androidAudioOffload,
+                        onChanged: settings.setAndroidAudioOffload,
+                      ),
+                    ],
+                  ),
+
+                  // 缓存
+                  _buildSection(
+                    title: '缓存',
+                    icon: Icons.storage_outlined,
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.storage_outlined),
+                        title: const Text('缓存管理'),
+                        subtitle: Text(
+                          '自动缓存 ${settings.autoCache ? "已开启" : "已关闭"} · 上限 ${settings.maxCacheChapters} 集',
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const CacheManageScreen(),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  // 音源
+                  _buildSection(
+                    title: '音源',
+                    icon: Icons.library_music_outlined,
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.library_music_outlined),
+                        title: const Text('音源管理'),
+                        subtitle: const Text('本地导入、链接导入、开启关闭'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const SourceManageScreen(),
+                          ),
+                        ),
+                      ),
+                      const Divider(height: 1, indent: 56),
+                      ListTile(
+                        leading: const Icon(Icons.cloud_queue),
+                        title: const Text('WebDAV 网盘书库'),
+                        subtitle: const Text('连接 NAS，播放网盘音频目录'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const WebDavScreen()),
+                        ),
+                      ),
+                      const Divider(height: 1, indent: 56),
+                      ListTile(
+                        leading: const Icon(Icons.cloud_outlined),
+                        title: const Text('百度网盘书库（测试）'),
+                        subtitle: const Text('登录后浏览网盘目录'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const BaiduPanScreen(),
+                          ),
+                        ),
+                      ),
+                      const Divider(height: 1, indent: 56),
+                      ListTile(
+                        leading: const Icon(Icons.cloud_circle_outlined),
+                        title: const Text('夸克网盘书库（测试）'),
+                        subtitle: const Text('登录后浏览夸克网盘目录'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const QuarkPanScreen(),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  // 诊断
+                  _buildSection(
+                    title: '诊断',
+                    icon: Icons.bug_report_outlined,
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.system_update_outlined),
+                        title: const Text('软件更新'),
+                        subtitle: const Text('检查新版本并下载安装包'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const SoftwareUpdateScreen(),
+                          ),
+                        ),
+                      ),
+                      const Divider(height: 1, indent: 56),
+                      ListTile(
+                        leading: const Icon(Icons.article_outlined),
+                        title: const Text('运行日志'),
+                        subtitle: const Text('查看搜索、播放、缓存运行记录'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const RuntimeLogScreen(),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 24),
+                ],
               ),
             ),
-            ListTile(
-              leading: const Icon(Icons.palette_outlined),
-              title: const Text('动态取色'),
-              subtitle: const Text('使用当前播放书籍封面生成 Material 3 配色'),
-              trailing: Switch(
-                value: settings.dynamicColor,
-                onChanged: settings.setDynamicColor,
-              ),
-            ),
-            _sectionTitle('搜索设置'),
-            ListTile(
-              leading: const Icon(Icons.travel_explore),
-              title: const Text('聚合搜索'),
-              subtitle: const Text('开启后一次搜索全部已启用音源；关闭后只搜索当前音源'),
-              trailing: Switch(
-                value: settings.aggregateSearch,
-                onChanged: settings.setAggregateSearch,
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.manage_search),
-              title: const Text('搜索匹配方式'),
-              subtitle: const Text('精确搜索只保留书名完全匹配关键词的结果'),
-              trailing: Text(
-                settings.searchMatchModeLabel,
-                style: TextStyle(color: cs.onSurfaceVariant),
-              ),
-              onTap: () => _chooseSearchMatchMode(settings),
-            ),
-            _sectionTitle('播放设置'),
-            ListTile(
-              leading: const Icon(Icons.battery_saver_outlined),
-              title: const Text('Android 音频卸载'),
-              subtitle: const Text('降低功耗；部分设备可能出现进度或蓝牙兼容问题，下次加载音频生效'),
-              trailing: Switch(
-                value: settings.androidAudioOffload,
-                onChanged: settings.setAndroidAudioOffload,
-              ),
-            ),
-            _sectionTitle('缓存'),
-            ListTile(
-              leading: const Icon(Icons.storage_outlined),
-              title: const Text('缓存管理'),
-              subtitle: Text(
-                '自动缓存 ${settings.autoCache ? '已开启' : '已关闭'} · 上限 ${settings.maxCacheChapters} 集 · ${settings.cacheFrequencyLabel}',
-              ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const CacheManageScreen()),
-              ),
-            ),
-            _sectionTitle('诊断'),
-            ListTile(
-              leading: const Icon(Icons.system_update_outlined),
-              title: const Text('软件更新'),
-              subtitle: const Text('检查公开仓库的新版本并下载安装包'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const SoftwareUpdateScreen()),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.article_outlined),
-              title: const Text('查看运行日志'),
-              subtitle: const Text('查看搜索、播放、缓存和音源运行记录'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const RuntimeLogScreen()),
-              ),
-            ),
-            _sectionTitle('音源管理'),
-            ListTile(
-              leading: const Icon(Icons.cloud_queue),
-              title: const Text('WebDAV 网盘书库'),
-              subtitle: const Text('连接 OpenList/AList/NAS，把网盘音频目录作为有声书播放'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const WebDavScreen()),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.cloud_outlined),
-              title: const Text('百度网盘书库（测试）'),
-              subtitle: const Text('登录后浏览网盘目录，试取直链播放（验证阶段）'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const BaiduPanScreen()),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.cloud_circle_outlined),
-              title: const Text('夸克网盘书库（测试）'),
-              subtitle: const Text('登录后浏览夸克网盘目录，按文件夹加入书架播放'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const QuarkPanScreen()),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.library_music_outlined),
-              title: const Text('音源管理'),
-              subtitle: const Text('本地导入、链接导入、开启关闭和删除'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const SourceManageScreen()),
-              ),
-            ),
-            const SizedBox(height: 24),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _sectionTitle(String text) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: Theme.of(context).colorScheme.primary,
+  Widget _buildSection({
+    required String title,
+    required IconData icon,
+    required List<Widget> children,
+  }) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outlineVariant,
+          width: 1,
         ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Row(
+              children: [
+                Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(width: 8),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ...children,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSwitchTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return ListTile(
+      leading: Icon(icon),
+      title: Text(title),
+      subtitle: Text(subtitle),
+      trailing: Switch(
+        value: value,
+        onChanged: onChanged,
       ),
     );
   }
@@ -227,44 +335,59 @@ class _ListeningStatsCard extends StatelessWidget {
     return AnimatedBuilder(
       animation: stats,
       builder: (context, _) => Container(
-        margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-        padding: const EdgeInsets.all(14),
+        margin: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: cs.primaryContainer,
-          borderRadius: BorderRadius.circular(8),
+          gradient: LinearGradient(
+            colors: [
+              cs.primaryContainer,
+              cs.secondaryContainer,
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: cs.shadow.withValues(alpha: 0.1),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.headphones, color: cs.onPrimaryContainer),
+                Icon(Icons.headphones, color: cs.onPrimaryContainer, size: 28),
                 const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    '听书时长',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: cs.onPrimaryContainer.withValues(alpha: 0.78),
-                    ),
+                Text(
+                  '听书统计',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: cs.onPrimaryContainer,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 16),
             Wrap(
-              spacing: 8,
-              runSpacing: 8,
+              spacing: 16,
+              runSpacing: 12,
               children: [
                 _StatsBadge(
-                  label: '今日',
-                  value: stats.todayLabel,
-                  colorScheme: cs,
-                ),
-                _StatsBadge(
+                  icon: Icons.access_time,
                   label: '累计',
                   value: stats.totalLabel,
-                  colorScheme: cs,
+                  color: cs.onPrimaryContainer,
+                ),
+                _StatsBadge(
+                  icon: Icons.today,
+                  label: '今日',
+                  value: stats.todayLabel,
+                  color: cs.onPrimaryContainer,
                 ),
               ],
             ),
@@ -276,49 +399,41 @@ class _ListeningStatsCard extends StatelessWidget {
 }
 
 class _StatsBadge extends StatelessWidget {
+  final IconData icon;
   final String label;
   final String value;
-  final ColorScheme colorScheme;
+  final Color color;
 
   const _StatsBadge({
+    required this.icon,
     required this.label,
     required this.value,
-    required this.colorScheme,
+    required this.color,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      constraints: const BoxConstraints(minWidth: 112, maxWidth: 220),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: colorScheme.onPrimaryContainer.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: colorScheme.onPrimaryContainer.withValues(alpha: 0.72),
-            ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 16, color: color.withValues(alpha: 0.8)),
+        const SizedBox(width: 6),
+        Text(
+          '$label: ',
+          style: TextStyle(
+            fontSize: 13,
+            color: color.withValues(alpha: 0.8),
           ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: colorScheme.onPrimaryContainer,
-            ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: color,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
