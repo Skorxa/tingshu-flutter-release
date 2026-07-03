@@ -187,9 +187,13 @@ class SourceManager {
     }
 
     final before = _stored.length;
-    _stored.removeWhere(
-      (source) => _removedBundledIds.contains('${source['id']}'),
-    );
+    _stored.removeWhere((source) {
+      final id = '${source['id']}';
+      if (!_removedBundledIds.contains(id)) return false;
+      final subscriptionId = '${source['subscriptionId'] ?? ''}'.trim();
+      final subscriptionUrl = '${source['subscriptionUrl'] ?? ''}'.trim();
+      return subscriptionId.isEmpty && subscriptionUrl.isEmpty;
+    });
     if (before != _stored.length) {
       _registered.removeWhere(_removedBundledIds.contains);
       if (_removedBundledIds.contains(_activeId)) _activeId = _firstEnabledId();
