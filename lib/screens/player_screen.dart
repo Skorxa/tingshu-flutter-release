@@ -180,8 +180,11 @@ class PlayerScreen extends StatelessWidget {
     final p = PlayerService.instance;
     final cs = Theme.of(context).colorScheme;
     return Scaffold(
+      backgroundColor: cs.surface,
       appBar: AppBar(
         title: const Text('正在播放'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         actions: const [_ShelfButton()],
       ),
       body: AnimatedBuilder(
@@ -194,42 +197,42 @@ class PlayerScreen extends StatelessWidget {
           ].join('  ·  ');
           return SafeArea(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
               child: Column(
                 children: [
-                  // 封面:占据上方弹性区,按可用空间自适应正方形 + 圆角柔影
+                  // 封面 - 更大的圆角和柔和阴影
                   Expanded(
                     child: Center(
                       child: LayoutBuilder(
                         builder: (context, constraints) {
                           final side = constraints.biggest.shortestSide;
-                          final coverSize = side > 340 ? 340.0 : side;
+                          final coverSize = (side > 360 ? 360.0 : side) * 0.95;
                           return _coverBox(p.cover, cs, coverSize);
                         },
                       ),
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  // 标题:章节名为主,书名 + 进度为次
+                  const SizedBox(height: 28),
+                  // 标题 - 更大字号
                   Text(
                     p.currentChapterName.isEmpty
                         ? '未在播放'
                         : p.currentChapterName,
                     style: const TextStyle(
-                      fontSize: 20,
+                      fontSize: 22,
                       fontWeight: FontWeight.bold,
-                      height: 1.25,
+                      height: 1.3,
                     ),
                     textAlign: TextAlign.center,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                   if (subtitle.isNotEmpty) ...[
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 10),
                     Text(
                       subtitle,
                       style: TextStyle(
-                        fontSize: 13,
+                        fontSize: 14,
                         color: cs.onSurfaceVariant,
                       ),
                       textAlign: TextAlign.center,
@@ -248,7 +251,7 @@ class PlayerScreen extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 20),
                   // 进度区(时间/进度条)随 position 高频刷新,其余控件不参与重建
                   AnimatedBuilder(
                     animation: p.positionListenable,
