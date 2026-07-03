@@ -3,9 +3,9 @@
   "versionCode": 8,
   "force": false,
   "changelog": "自动构建版本 1.2.2",
-  "sha256": "bfb3d4f2979e9d1142fafca6996f336a40e02006be076f721fc7d2eff9758aa4",
+  "sha256": "67a828ca683fc75a09df6e28830d396a5ce8ec474b4ff5f051573b16453f993a",
   "size": 25763219,
-  "publishedAt": "2026-07-03T14:38:07Z",
+  "publishedAt": "2026-07-03T15:09:56Z",
   "urls": [
     "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.2.2/tingshu-1.2.2-arm64.apk"
   ]
