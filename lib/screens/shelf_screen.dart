@@ -741,7 +741,7 @@ class _ShelfScreenState extends State<ShelfScreen>
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView.builder(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
         itemCount: books.length,
         itemBuilder: (context, i) {
           final b = books[i];
@@ -750,49 +750,123 @@ class _ShelfScreenState extends State<ShelfScreen>
           final sourceLabel = b.sourceName.isNotEmpty
               ? b.sourceName
               : b.sourceId;
-          return ListTile(
-            leading: ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: b.cover.isNotEmpty
-                  ? _coverImage(b.cover, cs)
-                  : _coverFallback(cs),
+          return Card(
+            margin: const EdgeInsets.only(bottom: 12),
+            child: InkWell(
+              onTap: opening ? null : () => _openBook(b),
+              onLongPress: opening ? null : () => _showBookMenu(b),
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    // 封面
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: b.cover.isNotEmpty
+                          ? _coverImage(b.cover, cs)
+                          : _coverFallback(cs),
+                    ),
+                    const SizedBox(width: 12),
+                    // 信息
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            b.title.isNotEmpty ? b.title : b.bookId,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              height: 1.3,
+                            ),
+                          ),
+                          if (b.author.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              b.author,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: cs.secondaryContainer,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              sourceLabel,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: cs.onSecondaryContainer,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // 操作按钮
+                    IconButton(
+                      icon: opening
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Icon(Icons.delete_outline, color: cs.onSurfaceVariant),
+                      onPressed: () async {
+                        if (opening) return;
+                        final confirmed = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: Text(history ? '删除历史记录' : '移出书架'),
+                            content: Text(
+                              history
+                                  ? '确定要删除「${b.title}」的播放记录吗？'
+                                  : '确定要将「${b.title}」移出书架吗？',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx, false),
+                                child: const Text('取消'),
+                              ),
+                              FilledButton(
+                                onPressed: () => Navigator.pop(ctx, true),
+                                child: const Text('确定'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirmed != true) return;
+                        if (history) {
+                          await ProgressService.instance.remove(
+                            sourceId: b.sourceId,
+                            bookId: b.bookId,
+                          );
+                        } else {
+                          await ShelfService.instance.remove(
+                            sourceId: b.sourceId,
+                            bookId: b.bookId,
+                          );
+                        }
+                        await _load();
+                      },
+                    ),
+                  ],
+                ),
+              ),
             ),
-            title: Text(
-              b.title.isNotEmpty ? b.title : b.bookId,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            subtitle: Text(
-              [b.author, sourceLabel].where((s) => s.isNotEmpty).join(' · '),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            trailing: IconButton(
-              icon: opening
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Icon(Icons.delete_outline, color: cs.onSurfaceVariant),
-              onPressed: () async {
-                if (opening) return;
-                if (history) {
-                  await ProgressService.instance.remove(
-                    sourceId: b.sourceId,
-                    bookId: b.bookId,
-                  );
-                  await _load();
-                } else {
-                  await ShelfService.instance.remove(
-                    sourceId: b.sourceId,
-                    bookId: b.bookId,
-                  );
-                }
-              },
-            ),
-            onTap: opening ? null : () => _openBook(b),
-            onLongPress: opening ? null : () => _showBookMenu(b),
           );
         },
       ),
@@ -819,20 +893,20 @@ class _ShelfScreenState extends State<ShelfScreen>
     );
   }
 
-  Widget _coverFallback(ColorScheme cs) => Container(
-    width: 48,
-    height: 48,
-    color: cs.surfaceContainerHighest,
-    child: Icon(Icons.menu_book, color: cs.onSurfaceVariant, size: 24),
-  );
-
   Widget _coverImage(String cover, ColorScheme cs) {
     return CoverImage(
       cover: cover,
-      width: 48,
-      height: 48,
+      width: 56,
+      height: 56,
       fit: BoxFit.cover,
       fallback: _coverFallback(cs),
     );
   }
+
+  Widget _coverFallback(ColorScheme cs) => Container(
+    width: 56,
+    height: 56,
+    color: cs.surfaceContainerHighest,
+    child: Icon(Icons.menu_book, color: cs.onSurfaceVariant, size: 28),
+  );
 }
