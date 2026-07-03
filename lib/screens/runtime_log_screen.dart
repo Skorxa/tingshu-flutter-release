@@ -16,6 +16,7 @@ class RuntimeLogScreen extends StatefulWidget {
 class _RuntimeLogScreenState extends State<RuntimeLogScreen> {
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _focusKey = GlobalKey();
+  String _filterLevel = 'all'; // all, error, warn, info
 
   @override
   void initState() {
@@ -48,17 +49,56 @@ class _RuntimeLogScreenState extends State<RuntimeLogScreen> {
       appBar: AppBar(
         title: const Text('运行日志'),
         actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.filter_list),
+            tooltip: '筛选',
+            initialValue: _filterLevel,
+            onSelected: (value) => setState(() => _filterLevel = value),
+            itemBuilder: (context) => [
+              const PopupMenuItem(value: 'all', child: Text('全部')),
+              const PopupMenuItem(value: 'error', child: Text('错误')),
+              const PopupMenuItem(value: 'warn', child: Text('警告')),
+              const PopupMenuItem(value: 'info', child: Text('信息')),
+            ],
+          ),
           IconButton(
             icon: const Icon(Icons.delete_sweep_outlined),
             tooltip: '清空',
-            onPressed: logs.clear,
+            onPressed: () async {
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('清空日志'),
+                  content: const Text('确定要清空所有运行日志吗？'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: const Text('取消'),
+                    ),
+                    FilledButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('清空'),
+                    ),
+                  ],
+                ),
+              );
+              if (confirm == true) logs.clear();
+            },
           ),
         ],
       ),
       body: AnimatedBuilder(
         animation: logs,
         builder: (context, _) {
-          final entries = logs.entries;
+          final allEntries = logs.entries;
+          final entries = _filterLevel == 'all'
+              ? allEntries
+              : allEntries.where((e) {
+                  if (_filterLevel == 'error') return e.level == 'ERROR';
+                  if (_filterLevel == 'warn') return e.level == 'WARN';
+                  return e.level == 'INFO';
+                }).toList();
+
           if (entries.isEmpty) {
             return Center(
               child: Column(
@@ -70,7 +110,10 @@ class _RuntimeLogScreenState extends State<RuntimeLogScreen> {
                     color: cs.onSurfaceVariant,
                   ),
                   const SizedBox(height: 12),
-                  Text('暂无运行日志', style: TextStyle(color: cs.onSurfaceVariant)),
+                  Text(
+                    _filterLevel == 'all' ? '暂无运行日志' : '该类型暂无日志',
+                    style: TextStyle(color: cs.onSurfaceVariant),
+                  ),
                 ],
               ),
             );
