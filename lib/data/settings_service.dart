@@ -18,12 +18,22 @@ class SettingsService extends ChangeNotifier {
     500,
     1000,
   ];
+  static const cacheSpaceLimitOptions = [
+    0, // 不限制
+    500, // 500 MB
+    1024, // 1 GB
+    2048, // 2 GB
+    5120, // 5 GB
+    10240, // 10 GB
+    20480, // 20 GB
+  ];
 
   static const _kDarkMode = 'settings_dark_mode';
   static const _kAutoCache = 'settings_auto_cache';
   static const _kMaxCacheChapters = 'settings_max_cache_chapters';
   static const _kCacheFrequency = 'settings_cache_frequency';
   static const _kCleanupLimit = 'settings_cleanup_limit';
+  static const _kCacheSpaceLimit = 'settings_cache_space_limit';
   static const _kAndroidAudioOffload = 'settings_android_audio_offload';
   static const _kAggregateSearch = 'settings_aggregate_search';
   static const _kDynamicColor = 'settings_dynamic_color';
@@ -39,6 +49,7 @@ class SettingsService extends ChangeNotifier {
   int _maxCacheChapters = 3;
   String _cacheFrequency = 'standard';
   int _cleanupLimit = 100;
+  int _cacheSpaceLimit = 0; // 0 表示不限制，单位 MB
   String _updateManifestUrl = '';
   bool _ready = false;
 
@@ -51,6 +62,7 @@ class SettingsService extends ChangeNotifier {
   int get maxCacheChapters => _maxCacheChapters;
   String get cacheFrequency => _cacheFrequency;
   int get cleanupLimit => _cleanupLimit;
+  int get cacheSpaceLimit => _cacheSpaceLimit;
   String get updateManifestUrl => _updateManifestUrl;
   bool get ready => _ready;
 
@@ -61,6 +73,14 @@ class SettingsService extends ChangeNotifier {
 
   String get cleanupLimitLabel =>
       _cleanupLimit == 0 ? '不清理' : '$_cleanupLimit 集';
+
+  String get cacheSpaceLimitLabel {
+    if (_cacheSpaceLimit == 0) return '不限制';
+    if (_cacheSpaceLimit >= 1024) {
+      return '${(_cacheSpaceLimit / 1024).toStringAsFixed(0)} GB';
+    }
+    return '$_cacheSpaceLimit MB';
+  }
 
   String get searchMatchModeLabel =>
       _searchMatchMode == 'exact' ? '精确搜索' : '模糊搜索';
@@ -86,6 +106,11 @@ class SettingsService extends ChangeNotifier {
       prefs.getInt(_kCleanupLimit),
       cleanupLimitOptions,
       100,
+    );
+    _cacheSpaceLimit = _validInt(
+      prefs.getInt(_kCacheSpaceLimit),
+      cacheSpaceLimitOptions,
+      0,
     );
     _updateManifestUrl = prefs.getString(_kUpdateManifestUrl) ?? '';
     _ready = true;
@@ -160,6 +185,14 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_kCleanupLimit, value);
+  }
+
+  Future<void> setCacheSpaceLimit(int value) async {
+    if (!cacheSpaceLimitOptions.contains(value)) return;
+    _cacheSpaceLimit = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_kCacheSpaceLimit, value);
   }
 
   Future<void> setUpdateManifestUrl(String value) async {

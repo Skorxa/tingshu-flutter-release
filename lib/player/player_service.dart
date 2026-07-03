@@ -43,10 +43,12 @@ class PlayerService extends ChangeNotifier {
   DateTime _lastBufferedEmit = DateTime(2000);
   Timer? _sleepTimer;
   Timer? _sleepTickTimer;
+  Timer? _fadeOutTimer;
   String _sleepMode = '';
   int _sleepValue = 0;
   int _sleepRemainingChapters = 0;
   DateTime? _sleepEndAt;
+  bool _isFadingOut = false;
 
   static AudioPlayer _createPlayer(bool offloadEnabled) {
     return AudioPlayer(
@@ -747,15 +749,28 @@ class PlayerService extends ChangeNotifier {
   void setSleepByMinutes(int minutes) {
     _sleepTimer?.cancel();
     _sleepTickTimer?.cancel();
+    _fadeOutTimer?.cancel();
     _sleepMode = 'minutes';
     _sleepValue = minutes;
     _sleepRemainingChapters = 0;
     _sleepEndAt = DateTime.now().add(Duration(minutes: minutes));
-    _sleepTimer = Timer(Duration(minutes: minutes), () {
-      LogService.instance.info('Player', '按时定时关闭触发', detail: '$minutes 分钟');
-      unawaited(_player.pause());
-      clearSleepTimer();
-    });
+
+    // 提前 10 秒开始淡出
+    final fadeStartDuration = Duration(minutes: minutes, seconds: -10);
+    if (fadeStartDuration.inSeconds > 0) {
+      _sleepTimer = Timer(fadeStartDuration, () {
+        LogService.instance.info('Player', '开始淡出音量', detail: '10秒淡出');
+        unawaited(_fadeOutAndPause());
+      });
+    } else {
+      // 时长小于10秒，直接暂停
+      _sleepTimer = Timer(Duration(minutes: minutes), () {
+        LogService.instance.info('Player', '按时定时关闭触发', detail: '$minutes 分钟');
+        unawaited(_player.pause());
+        clearSleepTimer();
+      });
+    }
+
     _sleepTickTimer = Timer.periodic(
       const Duration(seconds: 30),
       (_) => notifyListeners(),
@@ -764,15 +779,44 @@ class PlayerService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 淡出音量并暂停
+  Future<void> _fadeOutAndPause() async {
+    if (_isFadingOut) return;
+    _isFadingOut = true;
+
+    final originalVolume = _player.volume;
+    const steps = 20;
+    const stepDuration = Duration(milliseconds: 500); // 10秒 / 20步
+
+    for (int i = 0; i < steps; i++) {
+      if (!_isFadingOut) {
+        // 淡出被中断，恢复音量
+        await _player.setVolume(originalVolume);
+        return;
+      }
+      final volume = originalVolume * (1 - (i + 1) / steps);
+      await _player.setVolume(volume);
+      await Future.delayed(stepDuration);
+    }
+
+    await _player.pause();
+    await _player.setVolume(originalVolume); // 恢复音量供下次播放
+    _isFadingOut = false;
+    clearSleepTimer();
+  }
+
   void clearSleepTimer() {
     _sleepTimer?.cancel();
     _sleepTickTimer?.cancel();
+    _fadeOutTimer?.cancel();
     _sleepTimer = null;
     _sleepTickTimer = null;
+    _fadeOutTimer = null;
     _sleepMode = '';
     _sleepValue = 0;
     _sleepRemainingChapters = 0;
     _sleepEndAt = null;
+    _isFadingOut = false;
     LogService.instance.info('Player', '清除定时关闭');
     notifyListeners();
   }
