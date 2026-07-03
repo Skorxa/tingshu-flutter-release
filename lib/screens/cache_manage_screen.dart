@@ -458,7 +458,7 @@ class _CacheManageScreenState extends State<CacheManageScreen> {
                 ],
               ),
             ),
-            if (trailing != null) trailing,
+            ...?(trailing == null ? null : [trailing]),
           ],
         ),
       ),
