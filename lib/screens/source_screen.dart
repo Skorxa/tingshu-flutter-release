@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/listening_stats_service.dart';
 import '../data/settings_service.dart';
+import 'alist_screen.dart';
 import 'baidu_pan_screen.dart';
 import 'cache_manage_screen.dart';
 import 'quark_pan_screen.dart';
@@ -191,6 +192,17 @@ class _SourceScreenState extends State<SourceScreen> {
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(builder: (_) => const WebDavScreen()),
+                        ),
+                      ),
+                      const Divider(height: 1, indent: 56),
+                      ListTile(
+                        leading: const Icon(Icons.dns_outlined),
+                        title: const Text('Alist 书库'),
+                        subtitle: const Text('只需一个地址，支持 guest 访问'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const AlistScreen()),
                         ),
                       ),
                       const Divider(height: 1, indent: 56),

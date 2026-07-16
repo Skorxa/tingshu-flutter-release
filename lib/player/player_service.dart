@@ -39,6 +39,11 @@ class PlayerService extends ChangeNotifier {
   bool _pendingResume = false;
   double _resumePositionSeconds = 0;
   int _playSeq = 0;
+  bool _userWantsPlayback = false;
+  bool _recoveringPlayback = false;
+  int _recoveryAttempts = 0;
+  String _recoveryChapterId = '';
+  Timer? _stablePlaybackTimer;
   DateTime _lastPositionEmit = DateTime(2000);
   DateTime _lastBufferedEmit = DateTime(2000);
   Timer? _sleepTimer;
@@ -103,8 +108,90 @@ class PlayerService extends ChangeNotifier {
         _error = e.toString().replaceFirst('Exception: ', '');
         LogService.instance.error('Player', '播放流异常', error: e, stack: stack);
         notifyListeners();
+        unawaited(_recoverPlaybackStream(e));
       },
     );
+  }
+
+  Future<void> _recoverPlaybackStream(Object cause) async {
+    if (_recoveringPlayback ||
+        !_userWantsPlayback ||
+        _pendingResume ||
+        currentIndex < 0 ||
+        currentIndex >= chapters.length) {
+      return;
+    }
+    final recoverySourceId = sourceId;
+    final recoveryBookId = bookId;
+    final recoveryIndex = currentIndex;
+    final chapterId = '${chapters[recoveryIndex]['chapterId'] ?? ''}';
+    final chapterName = '${chapters[recoveryIndex]['name'] ?? ''}';
+    if (chapterId.isEmpty) return;
+    if (_recoveryChapterId != chapterId) {
+      _recoveryChapterId = chapterId;
+      _recoveryAttempts = 0;
+    }
+    if (_recoveryAttempts >= 2) {
+      LogService.instance.error(
+        'Player',
+        '自动恢复已达到上限',
+        error: Exception('$cause\n章节: $chapterName\n恢复次数: $_recoveryAttempts'),
+      );
+      return;
+    }
+
+    _recoveringPlayback = true;
+    try {
+      while (_userWantsPlayback && _recoveryAttempts < 2) {
+        if (sourceId != recoverySourceId ||
+            bookId != recoveryBookId ||
+            currentIndex != recoveryIndex ||
+            '${chapters[currentIndex]['chapterId'] ?? ''}' != chapterId) {
+          return;
+        }
+        _recoveryAttempts++;
+        final resumeAt = _player.position > Duration.zero
+            ? _player.position
+            : _positionNotifier.value;
+        final delay = Duration(milliseconds: 700 * _recoveryAttempts);
+        LogService.instance.warning(
+          'Player',
+          '准备自动恢复播放',
+          detail:
+              '章节: $chapterName\n第 $_recoveryAttempts/2 次\n断点: ${resumeAt.inSeconds} 秒\n等待: ${delay.inMilliseconds} ms',
+        );
+        await Future<void>.delayed(delay);
+        if (!_userWantsPlayback) return;
+        await playIndex(
+          recoveryIndex,
+          seekTo: resumeAt.inMilliseconds / 1000,
+          recovery: true,
+        );
+        if (_error == null) {
+          LogService.instance.info(
+            'Player',
+            '播放已自动恢复',
+            detail:
+                '章节: $chapterName\n断点: ${resumeAt.inSeconds} 秒\n恢复次数: $_recoveryAttempts',
+          );
+          return;
+        }
+      }
+    } finally {
+      _recoveringPlayback = false;
+    }
+  }
+
+  void _scheduleRecoveryReset(String chapterId) {
+    _stablePlaybackTimer?.cancel();
+    _stablePlaybackTimer = Timer(const Duration(seconds: 20), () {
+      if (!_playing || currentIndex < 0 || currentIndex >= chapters.length) {
+        return;
+      }
+      if ('${chapters[currentIndex]['chapterId'] ?? ''}' != chapterId) return;
+      _recoveryChapterId = chapterId;
+      _recoveryAttempts = 0;
+    });
   }
 
   /// 绑定后台媒体处理器(媒体通知/锁屏控件),由 main 在 AudioService.init 后调用。
@@ -128,7 +215,9 @@ class PlayerService extends ChangeNotifier {
   /// 把当前章节的曲目信息(标题/书名/封面/时长)推给媒体通知。
   void _updateNowPlaying() {
     final handler = _handler;
-    if (handler == null || currentIndex < 0 || currentIndex >= chapters.length) {
+    if (handler == null ||
+        currentIndex < 0 ||
+        currentIndex >= chapters.length) {
       return;
     }
     final ch = chapters[currentIndex];
@@ -365,9 +454,14 @@ class PlayerService extends ChangeNotifier {
     if (notify) notifyListeners();
   }
 
-  Future<void> playIndex(int index, {double seekTo = 0}) async {
+  Future<void> playIndex(
+    int index, {
+    double seekTo = 0,
+    bool recovery = false,
+  }) async {
     if (index < 0 || index >= chapters.length) return;
     _pendingResume = false; // 真正进入播放,清除待续播态
+    _userWantsPlayback = true;
     final seq = ++_playSeq;
     final playSourceId = sourceId;
     final playBookId = bookId;
@@ -379,6 +473,10 @@ class PlayerService extends ChangeNotifier {
     final ch = playChapters[index];
     final chapterId = '${ch['chapterId']}';
     final chapterName = '${ch['name'] ?? ''}';
+    if (!recovery || _recoveryChapterId != chapterId) {
+      _recoveryChapterId = chapterId;
+      _recoveryAttempts = 0;
+    }
     await _ensurePlayerConfig();
     if (seq != _playSeq || sourceId != playSourceId || bookId != playBookId) {
       return;
@@ -471,6 +569,8 @@ class PlayerService extends ChangeNotifier {
         if (!_isPlayRequestActive(seq, sourceId, bookId, chapterId)) return;
         await _player.setSpeed(_speed);
         await _player.play();
+        _error = null;
+        _scheduleRecoveryReset(chapterId);
         CacheService.instance.startForPlayback(
           sourceId: sourceId,
           bookId: bookId,
@@ -692,6 +792,14 @@ class PlayerService extends ChangeNotifier {
       LogService.instance.info('Player', '从待续播态开始续播');
       return playIndex(currentIndex, seekTo: resumeAt);
     }
+    _userWantsPlayback = true;
+    if (currentIndex >= 0 &&
+        (_error != null || _processing == ProcessingState.idle)) {
+      return playIndex(
+        currentIndex,
+        seekTo: _positionNotifier.value.inMilliseconds / 1000,
+      );
+    }
     LogService.instance.info('Player', '继续播放');
     await _player.play();
     _broadcast();
@@ -699,6 +807,9 @@ class PlayerService extends ChangeNotifier {
 
   Future<void> pause() async {
     LogService.instance.info('Player', '暂停播放');
+    _userWantsPlayback = false;
+    _playSeq++;
+    _stablePlaybackTimer?.cancel();
     unawaited(ListeningStatsService.instance.flush());
     await _player.pause();
     _broadcast();
@@ -766,6 +877,7 @@ class PlayerService extends ChangeNotifier {
       // 时长小于10秒，直接暂停
       _sleepTimer = Timer(Duration(minutes: minutes), () {
         LogService.instance.info('Player', '按时定时关闭触发', detail: '$minutes 分钟');
+        _userWantsPlayback = false;
         unawaited(_player.pause());
         clearSleepTimer();
       });
@@ -799,6 +911,7 @@ class PlayerService extends ChangeNotifier {
       await Future.delayed(stepDuration);
     }
 
+    _userWantsPlayback = false;
     await _player.pause();
     await _player.setVolume(originalVolume); // 恢复音量供下次播放
     _isFadingOut = false;
@@ -834,12 +947,17 @@ class PlayerService extends ChangeNotifier {
             detail: '设置值: $_sleepValue 集',
           );
           clearSleepTimer();
+          _userWantsPlayback = false;
           await _player.pause();
           return;
         }
         notifyListeners();
       }
-      await next();
+      if (currentIndex < chapters.length - 1) {
+        await next();
+      } else {
+        _userWantsPlayback = false;
+      }
     } finally {
       _handlingCompletion = false;
     }

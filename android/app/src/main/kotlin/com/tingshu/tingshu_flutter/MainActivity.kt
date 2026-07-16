@@ -37,6 +37,7 @@ class MainActivity : AudioServiceActivity() {
                     call.argument<String>("url") ?: "",
                     call.argument<String>("title") ?: "音源登录",
                     call.argument<String>("userAgent") ?: "",
+                    call.argument<String>("storageKey") ?: "",
                     result
                 )
                 else -> result.notImplemented()
@@ -136,6 +137,7 @@ class MainActivity : AudioServiceActivity() {
         url: String,
         title: String,
         userAgent: String,
+        storageKey: String,
         result: MethodChannel.Result
     ) {
         if (url.isBlank()) {
@@ -152,6 +154,7 @@ class MainActivity : AudioServiceActivity() {
                 putExtra("url", url)
                 putExtra("title", title)
                 putExtra("userAgent", userAgent)
+                if (storageKey.isNotBlank()) putExtra("storageKey", storageKey)
             }
             startActivityForResult(intent, REQUEST_SOURCE_LOGIN)
         } catch (e: Exception) {
@@ -236,7 +239,9 @@ class MainActivity : AudioServiceActivity() {
             result.success(
                 mapOf(
                     "cookie" to (data?.getStringExtra("cookie") ?: ""),
-                    "url" to (data?.getStringExtra("url") ?: "")
+                    "url" to (data?.getStringExtra("url") ?: ""),
+                    "storageKey" to (data?.getStringExtra("storageKey") ?: ""),
+                    "storageValue" to (data?.getStringExtra("storageValue") ?: "")
                 )
             )
             return

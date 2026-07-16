@@ -135,6 +135,21 @@ uni.request({
 
 App 会把请求交给 Dart 的 HTTP 层执行。
 
+需要解密站点返回的 AES/CBC 数据时，可以使用通用加密桥接：
+
+```js
+const plainText = await uni.crypto.aesCbcDecrypt({
+  cipherText: encryptedBase64,
+  key: keyText,
+  iv: ivText,
+  inputEncoding: 'base64',
+  keyEncoding: 'utf8',
+  ivEncoding: 'utf8'
+})
+```
+
+编码支持 `base64`、`hex`、`utf8`；AES key 必须为 16/24/32 字节，IV 必须为 16 字节。解密模式固定为 AES/CBC/PKCS7。
+
 ## 管理入口
 
 音源能力由 JS 自己声明，App 不为具体站点写特殊适配逻辑。

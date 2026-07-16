@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../data/log_service.dart';
+import '../data/search_history_service.dart';
 import '../data/settings_service.dart';
 import '../source/models.dart';
 import '../source/source_debug_runner.dart';
@@ -36,17 +39,105 @@ class _SourceBucket {
 
 class _SearchScreenState extends State<SearchScreen> {
   final _ctrl = TextEditingController();
+  final _resultsScrollController = ScrollController();
   final Map<String, _SourceBucket> _buckets = {};
   String _keyword = '';
   String _selectedSourceId = 'all';
   bool _loading = false;
   bool _aggregateMode = true;
+  bool _queryEmpty = true;
+  bool _historyLoaded = false;
+  List<String> _history = const [];
   String? _error;
 
   @override
+  void initState() {
+    super.initState();
+    _ctrl.addListener(_onQueryChanged);
+    _resultsScrollController.addListener(_onResultsScroll);
+    unawaited(_loadHistory());
+  }
+
+  @override
   void dispose() {
+    _ctrl.removeListener(_onQueryChanged);
+    _resultsScrollController.removeListener(_onResultsScroll);
+    _resultsScrollController.dispose();
     _ctrl.dispose();
     super.dispose();
+  }
+
+  void _onResultsScroll() {
+    if (!_resultsScrollController.hasClients || _loading || !_hasMore) return;
+    if (_resultsScrollController.position.extentAfter <= 320) {
+      unawaited(_loadMore());
+    }
+  }
+
+  void _onQueryChanged() {
+    final empty = _ctrl.text.trim().isEmpty;
+    if (empty == _queryEmpty) return;
+    setState(() => _queryEmpty = empty);
+  }
+
+  Future<void> _loadHistory() async {
+    final history = await SearchHistoryService.instance.load();
+    if (!mounted) return;
+    setState(() {
+      _history = history;
+      _historyLoaded = true;
+    });
+  }
+
+  Future<void> _recordHistory(String keyword) async {
+    final history = await SearchHistoryService.instance.add(keyword);
+    if (!mounted) return;
+    setState(() {
+      _history = history;
+      _historyLoaded = true;
+    });
+  }
+
+  Future<void> _removeHistory(String keyword) async {
+    final history = await SearchHistoryService.instance.remove(keyword);
+    if (!mounted) return;
+    setState(() => _history = history);
+  }
+
+  Future<void> _clearHistory() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('清空搜索历史'),
+        content: const Text('确定删除全部搜索记录吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('清空'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await SearchHistoryService.instance.clear();
+    if (!mounted) return;
+    setState(() => _history = const []);
+  }
+
+  void _searchHistory(String keyword) {
+    _ctrl
+      ..text = keyword
+      ..selection = TextSelection.collapsed(offset: keyword.length);
+    unawaited(_search());
+  }
+
+  void _clearQuery() {
+    _ctrl.clear();
+    FocusScope.of(context).unfocus();
   }
 
   List<_SourceBucket> get _sourceBuckets => _buckets.values.toList();
@@ -75,6 +166,7 @@ class _SearchScreenState extends State<SearchScreen> {
     final kw = _ctrl.text.trim();
     if (kw.isEmpty || _loading) return;
     if (reset) {
+      unawaited(_recordHistory(kw));
       _aggregateMode = SettingsService.instance.aggregateSearch;
       final allSources = SourceManager.instance.getSources();
       final sources = _aggregateMode
@@ -151,7 +243,10 @@ class _SearchScreenState extends State<SearchScreen> {
         pageSize: 20,
       );
       final filtered = res.list.where(_matchesSearchMode).toList();
-      bucket.books.addAll(filtered);
+      final existingIds = bucket.books.map((book) => book.bookId).toSet();
+      bucket.books.addAll(
+        filtered.where((book) => existingIds.add(book.bookId)),
+      );
       bucket.hasMore = res.hasMore && res.page < res.maxPage;
       bucket.page = res.page + 1;
       bucket.error = null;
@@ -290,10 +385,21 @@ class _SearchScreenState extends State<SearchScreen> {
                       ? '聚合搜索书名 / 作者'
                       : '搜索当前音源',
                   prefixIcon: const Icon(Icons.search),
-                  suffixIcon: IconButton(
-                    icon: const Icon(Icons.arrow_forward),
-                    tooltip: '搜索',
-                    onPressed: _search,
+                  suffixIcon: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (!_queryEmpty)
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          tooltip: '清空输入',
+                          onPressed: _clearQuery,
+                        ),
+                      IconButton(
+                        icon: const Icon(Icons.arrow_forward),
+                        tooltip: '搜索',
+                        onPressed: _search,
+                      ),
+                    ],
                   ),
                   filled: true,
                   contentPadding: EdgeInsets.zero,
@@ -312,6 +418,9 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Widget _buildBody() {
+    if (_queryEmpty && _historyLoaded) {
+      return _historyPane();
+    }
     if (_buckets.isEmpty) {
       return _empty(
         icon: Icons.travel_explore,
@@ -332,6 +441,65 @@ class _SearchScreenState extends State<SearchScreen> {
           color: Theme.of(context).colorScheme.outlineVariant,
         ),
         Expanded(child: _resultPane()),
+      ],
+    );
+  }
+
+  Widget _historyPane() {
+    if (_history.isEmpty) {
+      return _empty(
+        icon: Icons.history,
+        text: SettingsService.instance.aggregateSearch
+            ? '输入关键词聚合搜索全部音源'
+            : '输入关键词搜索当前音源',
+      );
+    }
+    final cs = Theme.of(context).colorScheme;
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 6, 8, 4),
+          child: Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  '搜索历史',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: _clearHistory,
+                icon: const Icon(Icons.delete_sweep_outlined, size: 20),
+                label: const Text('清空'),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.only(bottom: 24),
+            itemCount: _history.length,
+            separatorBuilder: (_, _) =>
+                Divider(height: 1, indent: 56, color: cs.outlineVariant),
+            itemBuilder: (context, index) {
+              final keyword = _history[index];
+              return ListTile(
+                leading: Icon(Icons.history, color: cs.onSurfaceVariant),
+                title: Text(
+                  keyword,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: IconButton(
+                  icon: const Icon(Icons.close, size: 20),
+                  tooltip: '删除记录',
+                  onPressed: () => _removeHistory(keyword),
+                ),
+                onTap: () => _searchHistory(keyword),
+              );
+            },
+          ),
+        ),
       ],
     );
   }
@@ -432,35 +600,34 @@ class _SearchScreenState extends State<SearchScreen> {
     if (hits.isEmpty) {
       return _empty(icon: Icons.search_off, text: _loading ? '搜索中…' : '没有搜索结果');
     }
-    return NotificationListener<ScrollNotification>(
-      onNotification: (n) {
-        if (n.metrics.pixels >= n.metrics.maxScrollExtent - 200 &&
-            _hasMore &&
-            !_loading) {
-          _loadMore();
+    return ListView.builder(
+      controller: _resultsScrollController,
+      itemCount: hits.length + 1,
+      itemBuilder: (ctx, i) {
+        if (i == hits.length) {
+          return Padding(
+            padding: const EdgeInsets.all(16),
+            child: Center(
+              child: _loading
+                  ? const CircularProgressIndicator(strokeWidth: 2)
+                  : _hasMore
+                  ? TextButton.icon(
+                      onPressed: _loadMore,
+                      icon: const Icon(Icons.expand_more),
+                      label: const Text('加载更多'),
+                    )
+                  : Text(
+                      '没有更多了',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+            ),
+          );
         }
-        return false;
+        return _bookCell(hits[i]);
       },
-      child: ListView.builder(
-        itemCount: hits.length + 1,
-        itemBuilder: (ctx, i) {
-          if (i == hits.length) {
-            return Padding(
-              padding: const EdgeInsets.all(16),
-              child: Center(
-                child: Text(
-                  _loading ? '加载中…' : (_hasMore ? '上拉加载更多' : '没有更多了'),
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            );
-          }
-          return _bookCell(hits[i]);
-        },
-      ),
     );
   }
 
@@ -546,7 +713,9 @@ class _SearchScreenState extends State<SearchScreen> {
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 fontSize: 12,
-                                color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                                color: cs.onSurfaceVariant.withValues(
+                                  alpha: 0.7,
+                                ),
                               ),
                             ),
                           ),
@@ -568,11 +737,7 @@ class _SearchScreenState extends State<SearchScreen> {
       width: 56,
       height: 56,
       color: cs.surfaceContainerHighest,
-      child: Icon(
-        Icons.book_outlined,
-        color: cs.onSurfaceVariant,
-        size: 28,
-      ),
+      child: Icon(Icons.book_outlined, color: cs.onSurfaceVariant, size: 28),
     );
   }
 

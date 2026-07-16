@@ -62,6 +62,20 @@ Future<void> _createCatalogTables(Database db) async {
   )''');
 }
 
+Future<void> _createCacheStateTable(Database db) async {
+  await db.execute('''CREATE TABLE IF NOT EXISTS cache_state (
+    id INTEGER PRIMARY KEY CHECK(id = 1),
+    sourceId TEXT,
+    bookId TEXT,
+    bookTitle TEXT,
+    cover TEXT,
+    currentChapterId TEXT,
+    currentIndex INTEGER,
+    nextRunAt INTEGER,
+    updatedAt INTEGER
+  )''');
+}
+
 Future<void> _createIndexes(Database db) async {
   await db.execute('''CREATE INDEX IF NOT EXISTS idx_catalog_chapters_book_order
     ON catalog_chapters(sourceId, bookId, chapterIndex)''');
@@ -138,12 +152,13 @@ Future<Database> getDb() async {
   final dir = await getDatabasesPath();
   _db = await openDatabase(
     join(dir, 'tingshu.db'),
-    version: 6,
+    version: 7,
     onCreate: (db, _) async {
       await _createProgressTable(db);
       await _createShelfTable(db);
       await _createCacheTable(db);
       await _createCatalogTables(db);
+      await _createCacheStateTable(db);
       await _createIndexes(db);
     },
     onUpgrade: (db, oldVersion, newVersion) async {
@@ -161,6 +176,13 @@ Future<Database> getDb() async {
         await _migrateCacheTable(db);
         await _createIndexes(db);
       }
+      if (oldVersion < 7) {
+        await _createCacheStateTable(db);
+      }
+    },
+    onOpen: (db) async {
+      await _createCacheStateTable(db);
+      await _createIndexes(db);
     },
   );
   return _db!;

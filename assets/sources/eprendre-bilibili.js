@@ -39,6 +39,16 @@
         break
       }
     }
+    const currentPage = Math.max(1, Number(data.page || page) || page)
+    const responsePageSize = Math.max(1, Number(data.pagesize || pageSize) || pageSize)
+    const total = Math.max(0, Number(data.numResults || 0) || 0)
+    const nextPage = Math.max(0, Number(data.next || 0) || 0)
+    const maxPage = Math.max(
+      currentPage,
+      Number(data.numPages || 0) || 0,
+      total > 0 ? Math.ceil(total / responsePageSize) : 0,
+      nextPage > currentPage ? nextPage : 0
+    )
     return {
       list: videos.map(item => ({
         bookId: this._site + '/video/' + item.bvid,
@@ -47,9 +57,9 @@
         author: item.author || '',
         intro: item.play ? ('播放次数: ' + item.play) : ''
       })),
-      page,
-      maxPage: Number(data.numPages || page) || page,
-      hasMore: page < (Number(data.numPages || page) || page)
+      page: currentPage,
+      maxPage,
+      hasMore: nextPage > currentPage || currentPage < maxPage
     }
   },
 

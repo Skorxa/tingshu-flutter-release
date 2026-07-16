@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../data/alist_service.dart';
 import '../data/baidu_pan_service.dart';
 import '../data/catalog_cache_service.dart';
 import '../data/log_service.dart';
@@ -87,6 +88,7 @@ class _ShelfScreenState extends State<ShelfScreen>
     if (sourceId == 'webdav') return 'WebDAV';
     if (sourceId == 'baidu') return '百度网盘';
     if (sourceId == 'quark') return '夸克网盘';
+    if (sourceId == 'alist') return 'Alist';
     return SourceManager.instance.getSourceName(sourceId);
   }
 
@@ -137,6 +139,10 @@ class _ShelfScreenState extends State<ShelfScreen>
       }
       if (sourceId == 'quark') {
         await _openQuarkBook(book);
+        return;
+      }
+      if (sourceId == 'alist') {
+        await _openAlistBook(book);
         return;
       }
       if (SourceManager.instance.activeId != sourceId) {
@@ -524,6 +530,118 @@ class _ShelfScreenState extends State<ShelfScreen>
     LogService.instance.info(
       'Shelf',
       '从 WebDAV 书架进入播放',
+      detail: '书名: ${book.title}\n章节序号: ${index + 1}\n断点: ${seekTo.toInt()} 秒',
+    );
+    if (!mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const PlayerScreen()),
+    ).then((_) => _load());
+  }
+
+  Future<void> _openAlistBook(ShelfBook book) async {
+    final service = AlistService.instance;
+    if (!service.ready) throw Exception('请先配置 Alist');
+    await service.activateForScopedPath(book.bookId);
+    final rawPath = service.pathFromScopedPath(book.bookId);
+    final items = await service.list(rawPath);
+    final alistBook = service.toBook(rawPath, items);
+    if (alistBook.audioFiles.isEmpty) throw Exception('目录没有可播放的音频文件');
+
+    // 解析每集直链（/api/fs/get 拿 fresh sign），失败的章节跳过
+    final chapters = <Map<String, dynamic>>[];
+    for (var i = 0; i < alistBook.audioFiles.length; i++) {
+      final file = alistBook.audioFiles[i];
+      final scopedPath = service.scopedPath(file.path);
+      try {
+        final audio = await service.resolveAudio(scopedPath);
+        chapters.add({
+          'chapterId': 'alist:$scopedPath',
+          'index': i + 1,
+          'name': file.name,
+          'audioUrl': audio.url,
+          'audioHeaders': audio.headers,
+        });
+      } catch (e) {
+        LogService.instance.warning(
+          'Shelf',
+          'Alist 章节直链解析失败，跳过',
+          detail: '书名: ${book.title}\n文件: ${file.name}\n错误: $e',
+        );
+      }
+    }
+    if (chapters.isEmpty) throw Exception('无法解析任何音频直链，可能 token 失效');
+
+    // 补本地封面
+    final coverItem = service.findCoverItem(items);
+    String cover = book.cover;
+    if (coverItem != null) {
+      try {
+        final localCover = await service.cacheCover(coverItem);
+        if (localCover.isNotEmpty) cover = localCover;
+      } catch (e) {
+        LogService.instance.warning(
+          'Shelf',
+          'Alist 本地封面补全失败，继续使用现有封面',
+          detail: '书名: ${book.title}\n错误: $e',
+        );
+      }
+    }
+
+    // 缓存目录，下次进书架可直接播放
+    await CatalogCacheService.instance.savePage(
+      sourceId: 'alist',
+      bookId: service.scopedPath(alistBook.path),
+      info: CatalogInfo(
+        title: alistBook.title.isNotEmpty ? alistBook.title : book.title,
+        cover: cover,
+        author: alistBook.narrator.isEmpty
+            ? alistBook.author
+            : '${alistBook.author} / ${alistBook.narrator}',
+        trackCount: chapters.length,
+        isFinished: true,
+      ),
+      chapters: [
+        for (final ch in chapters)
+          Chapter(
+            chapterId: '${ch['chapterId']}',
+            index: (ch['index'] as num).toInt(),
+            name: '${ch['name']}',
+          ),
+      ],
+      page: 1,
+      maxPage: 1,
+      hasMore: false,
+    );
+
+    final progress = await ProgressService.instance.load(
+      sourceId: 'alist',
+      bookId: book.bookId,
+    );
+    var index = 0;
+    var seekTo = 0.0;
+    if (progress != null) {
+      final chapterId = '${progress['chapterId'] ?? ''}';
+      final savedIndex = (progress['chapterIdx'] as int?) ?? 0;
+      final matched = chapters.indexWhere(
+        (chapter) => '${chapter['chapterId'] ?? ''}' == chapterId,
+      );
+      index = matched >= 0 ? matched : savedIndex;
+      if (index < 0 || index >= chapters.length) index = 0;
+      seekTo = (progress['currentTime'] as num?)?.toDouble() ?? 0;
+    }
+
+    PlayerService.instance.setContext(
+      sourceId: 'alist',
+      bookId: book.bookId,
+      bookTitle: alistBook.title.isNotEmpty ? alistBook.title : book.title,
+      cover: cover,
+      chapters: chapters,
+    );
+    await PlayerService.instance.playIndex(index, seekTo: seekTo);
+    LogService.instance.info(
+      'Shelf',
+      '从 Alist 书架进入播放',
       detail: '书名: ${book.title}\n章节序号: ${index + 1}\n断点: ${seekTo.toInt()} 秒',
     );
     if (!mounted) return;

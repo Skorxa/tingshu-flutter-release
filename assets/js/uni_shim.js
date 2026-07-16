@@ -4,6 +4,8 @@
 
 var __httpSeq = 0;
 var __httpCbs = {};
+var __cryptoSeq = 0;
+var __cryptoCbs = {};
 var __store = {};
 var __sourceConfigs = {};
 var __currentCallSourceId = '';
@@ -45,6 +47,26 @@ var uni = {
     };
     sendMessage('http', JSON.stringify(payload));
   },
+  crypto: {
+    aesCbcDecrypt: function (opts) {
+      opts = opts || {};
+      return new Promise(function (resolve, reject) {
+        var id = ++__cryptoSeq;
+        __cryptoCbs[id] = { resolve: resolve, reject: reject };
+        sendMessage('crypto', JSON.stringify({
+          id: id,
+          sourceId: __currentCallSourceId,
+          operation: 'aesCbcDecrypt',
+          cipherText: opts.cipherText || opts.data || '',
+          key: opts.key || '',
+          iv: opts.iv || '',
+          inputEncoding: opts.inputEncoding || 'base64',
+          keyEncoding: opts.keyEncoding || 'base64',
+          ivEncoding: opts.ivEncoding || 'base64'
+        }));
+      });
+    }
+  },
   getStorageSync: function (k) {
     var cfg = __sourceConfigs[__currentCallSourceId] || {};
     if (k === 'sourceConfig' || k === 'config') return cfg;
@@ -75,6 +97,19 @@ function __httpReject(id, errMsg) {
   }
 }
 
+function __cryptoResolve(id, envJson) {
+  var cb = __cryptoCbs[id]; if (!cb) return;
+  delete __cryptoCbs[id];
+  var env;
+  try { env = JSON.parse(envJson); } catch (e) { env = { data: '' }; }
+  cb.resolve(env.data == null ? '' : env.data);
+}
+function __cryptoReject(id, errMsg) {
+  var cb = __cryptoCbs[id]; if (!cb) return;
+  delete __cryptoCbs[id];
+  cb.reject(new Error(errMsg || 'crypto fail'));
+}
+
 // ── 音源注册表 ──
 var __sources = {};
 
@@ -96,6 +131,7 @@ function __loadSource(code) {
   ['search', 'getChapters', 'getAudioUrl'].forEach(function (method) {
     if (typeof src[method] !== 'function') throw new Error('音源缺少方法: ' + method);
   });
+  var supportsDiscover = typeof src.discover === 'function';
   var configFields = Array.isArray(src.configFields) ? src.configFields : [];
   src.config = __sourceConfigs[src.id] || {};
   __sources[src.id] = src;
@@ -112,7 +148,8 @@ function __loadSource(code) {
     apiVersion: apiVersion,
     configFields: configFields,
     loginUrl: loginUrl,
-    loginConfigKey: loginConfigKey
+    loginConfigKey: loginConfigKey,
+    supportsDiscover: supportsDiscover
   });
 }
 

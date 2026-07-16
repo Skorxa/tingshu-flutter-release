@@ -94,6 +94,34 @@ class SearchResult {
   );
 }
 
+/// 发现页单段:标题 + 书籍列表
+class DiscoverSection {
+  final String title;
+  final List<Book> list;
+
+  const DiscoverSection({required this.title, required this.list});
+
+  factory DiscoverSection.fromMap(Map m) => DiscoverSection(
+    title: '${m['title'] ?? ''}',
+    list: ((m['list'] as List?) ?? [])
+        .map((e) => Book.fromMap(e as Map))
+        .toList(),
+  );
+}
+
+/// 发现页结果:多段内容
+class DiscoverResult {
+  final List<DiscoverSection> sections;
+
+  const DiscoverResult({required this.sections});
+
+  factory DiscoverResult.fromMap(Map m) => DiscoverResult(
+    sections: ((m['sections'] as List?) ?? [])
+        .map((e) => DiscoverSection.fromMap(e as Map))
+        .toList(),
+  );
+}
+
 /// 目录结果
 class CatalogResult {
   final CatalogInfo info;
@@ -238,6 +266,7 @@ class SourceMeta {
   final String loginConfigKey;
   final int apiVersion;
   final List<SourceConfigField> configFields;
+  final bool supportsDiscover;
   bool active;
   bool enabled;
 
@@ -248,6 +277,7 @@ class SourceMeta {
     this.loginConfigKey = '',
     this.apiVersion = 1,
     this.configFields = const [],
+    this.supportsDiscover = false,
     this.active = false,
     this.enabled = true,
   });

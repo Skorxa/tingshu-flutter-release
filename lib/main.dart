@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:audio_service/audio_service.dart';
 
 import 'data/baidu_pan_service.dart';
+import 'data/cache_service.dart';
 import 'data/db.dart';
 import 'data/listening_stats_service.dart';
 import 'data/log_service.dart';
@@ -9,9 +10,11 @@ import 'data/quark_pan_service.dart';
 import 'data/settings_service.dart';
 import 'data/theme_service.dart';
 import 'data/webdav_service.dart';
+import 'data/alist_service.dart';
 import 'player/audio_handler.dart';
 import 'player/player_service.dart';
 import 'source/source_manager.dart';
+import 'screens/discover_screen.dart';
 import 'screens/search_screen.dart';
 import 'screens/shelf_screen.dart';
 import 'screens/source_screen.dart';
@@ -81,12 +84,23 @@ Future<void> main() async {
   } catch (e, stack) {
     LogService.instance.error('QuarkPan', '配置加载失败', error: e, stack: stack);
   }
+  try {
+    await AlistService.instance.init();
+    LogService.instance.info('Alist', '配置加载完成');
+  } catch (e, stack) {
+    LogService.instance.error('Alist', '配置加载失败', error: e, stack: stack);
+  }
   ThemeService.instance; // 触发构造:启动封面取色监听
   try {
     await PlayerService.instance.restoreLastSession();
     LogService.instance.info('Player', '上次播放恢复完成');
   } catch (e, stack) {
     LogService.instance.error('Player', '上次播放恢复失败', error: e, stack: stack);
+  }
+  try {
+    await CacheService.instance.restorePending();
+  } catch (e, stack) {
+    LogService.instance.error('Cache', '自动缓存任务恢复失败', error: e, stack: stack);
   }
   runApp(const TingshuApp());
 }
@@ -121,7 +135,7 @@ class TingshuApp extends StatelessWidget {
   }
 }
 
-/// 底部导航:搜索 / 书架 / 设置 + 全局 MiniPlayer
+/// 底部导航:发现 / 搜索 / 书架 / 设置 + 全局 MiniPlayer
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
 
@@ -131,7 +145,12 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _idx = 0;
-  final _pages = const [SearchScreen(), ShelfScreen(), SourceScreen()];
+  final _pages = const [
+    DiscoverScreen(),
+    SearchScreen(),
+    ShelfScreen(),
+    SourceScreen(),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -148,6 +167,11 @@ class _HomeShellState extends State<HomeShell> {
         selectedIndex: _idx,
         onDestinationSelected: (i) => setState(() => _idx = i),
         destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.explore_outlined),
+            selectedIcon: Icon(Icons.explore),
+            label: '发现',
+          ),
           NavigationDestination(
             icon: Icon(Icons.search_outlined),
             selectedIcon: Icon(Icons.search),

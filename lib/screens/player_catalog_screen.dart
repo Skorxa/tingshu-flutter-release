@@ -22,8 +22,9 @@ class PlayerCatalogScreen extends StatefulWidget {
 class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
   // 克制预加载:进页面/刷新只自动补 _maxAutoPages 页,跳转时才全量补全,降低风控概率
   static const _maxAutoPages = 3;
+  static const _chapterExtent = 64.0;
   final _random = Random();
-  final ScrollController _scrollController = ScrollController();
+  late final ScrollController _scrollController;
   final List<Chapter> _chapters = [];
   final Set<String> _cachedIds = {};
   CatalogInfo? _info;
@@ -45,6 +46,10 @@ class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
   @override
   void initState() {
     super.initState();
+    final currentIndex = PlayerService.instance.currentIndex;
+    _scrollController = ScrollController(
+      initialScrollOffset: currentIndex > 0 ? currentIndex * _chapterExtent : 0,
+    );
     CacheService.instance.addListener(_onCacheChanged);
     unawaited(_init());
   }
@@ -69,47 +74,74 @@ class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
     _bookId = player.bookId;
     _bookTitle = player.bookTitle;
     _cover = player.cover;
+
+    // 播放器内存中的目录可以立即显示，也一定包含当前正在播放的章节。
+    // SQLite 目录随后合并，避免进入页面时先等待整本目录读取。
+    if (player.chapters.isNotEmpty) {
+      _mergeChapters(player.chapters.map(Chapter.fromMap));
+      _initialized = true;
+      _hasMore = !_isStaticCatalogSource(_sourceId);
+      _focusCurrentChapter();
+    }
+
     if (_sourceId.isNotEmpty && _bookId.isNotEmpty) {
-      final cached = await CatalogCacheService.instance.load(
-        sourceId: _sourceId,
-        bookId: _bookId,
-      );
-      if (cached != null && cached.chapters.isNotEmpty && mounted) {
-        setState(() {
-          _info = cached.info;
-          _chapters
-            ..clear()
-            ..addAll(cached.chapters);
-          _page = cached.page + 1;
-          _maxPage = cached.maxPage;
-          _hasMore = cached.hasMore && cached.page < cached.maxPage;
-        });
+      if (player.chapters.isNotEmpty) {
+        final cached = await CatalogCacheService.instance.loadMeta(
+          sourceId: _sourceId,
+          bookId: _bookId,
+        );
+        if (cached != null && mounted) {
+          setState(() {
+            _info = cached.info;
+            _page = cached.page + 1;
+            _maxPage = cached.maxPage;
+            _hasMore = cached.hasMore && cached.page < cached.maxPage;
+          });
+        }
+      } else {
+        final cached = await CatalogCacheService.instance.load(
+          sourceId: _sourceId,
+          bookId: _bookId,
+        );
+        if (cached != null && cached.chapters.isNotEmpty && mounted) {
+          setState(() {
+            _info = cached.info;
+            _mergeChapters(cached.chapters);
+            _page = cached.page + 1;
+            _maxPage = cached.maxPage;
+            _hasMore = cached.hasMore && cached.page < cached.maxPage;
+            _initialized = true;
+          });
+          _focusCurrentChapter();
+        }
       }
     }
 
-    if (_chapters.isEmpty && player.chapters.isNotEmpty && mounted) {
-      setState(() {
-        _chapters
-          ..clear()
-          ..addAll(player.chapters.map(Chapter.fromMap));
-        _page = 1;
-        _hasMore = true;
-      });
-    }
-
-    await _refreshCachedIds();
     if (_chapters.isEmpty) {
       await _loadPage(reset: true);
     }
+    if (!mounted) return;
+    if (!_initialized) setState(() => _initialized = true);
+    _focusCurrentChapter();
+    unawaited(_refreshCachedIds());
     if (_isStaticCatalogSource(_sourceId)) {
       _hasMore = false;
     } else if (_hasMore) {
       unawaited(_loadRemainingCatalog());
     }
-    if (mounted) {
-      setState(() => _initialized = true);
-      _focusCurrentChapter();
+  }
+
+  void _mergeChapters(Iterable<Chapter> chapters) {
+    final existingIds = _chapters
+        .map((chapter) => chapter.chapterId)
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    for (final chapter in chapters) {
+      if (chapter.chapterId.isEmpty || existingIds.add(chapter.chapterId)) {
+        _chapters.add(chapter);
+      }
     }
+    _chapters.sort((a, b) => a.index.compareTo(b.index));
   }
 
   Future<void> _refreshCachedIds() async {
@@ -177,15 +209,7 @@ class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
       if (!mounted) return false;
       setState(() {
         _info = result.info;
-        final existingIds = _chapters
-            .map((chapter) => chapter.chapterId)
-            .toSet();
-        for (final chapter in result.list) {
-          if (existingIds.add(chapter.chapterId)) {
-            _chapters.add(chapter);
-          }
-        }
-        _chapters.sort((a, b) => a.index.compareTo(b.index));
+        _mergeChapters(result.list);
         _hasMore = hasMore;
         _page = result.page + 1;
         _maxPage = result.maxPage;
@@ -193,8 +217,8 @@ class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
       if (!fromAuto) {
         _syncPlayerContext();
       }
-      await _refreshCachedIds();
       _focusCurrentChapter();
+      unawaited(_refreshCachedIds());
       LogService.instance.info(
         'Catalog',
         '播放器目录分页加载完成',
@@ -310,8 +334,8 @@ class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
       _error = null;
     });
     _syncPlayerContext();
-    await _refreshCachedIds();
     _focusCurrentChapter(force: true);
+    unawaited(_refreshCachedIds());
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('夸克目录已刷新，共 ${cached.chapters.length} 集')),
@@ -344,6 +368,31 @@ class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
       return '';
     }
     return '${player.chapters[player.currentIndex]['chapterId'] ?? ''}';
+  }
+
+  int _currentCatalogIndex(PlayerService player) {
+    if (_chapters.isEmpty) return -1;
+    final currentChapterId = _currentChapterId(player);
+    var index = currentChapterId.isEmpty
+        ? -1
+        : _chapters.indexWhere(
+            (chapter) => chapter.chapterId == currentChapterId,
+          );
+    if (index >= 0) return index;
+    if (player.currentIndex >= 0 &&
+        player.currentIndex < player.chapters.length) {
+      final rawIndex = player.chapters[player.currentIndex]['index'];
+      final chapterNumber = rawIndex is num ? rawIndex.toInt() : -1;
+      if (chapterNumber >= 0) {
+        index = _chapters.indexWhere(
+          (chapter) => chapter.index == chapterNumber,
+        );
+      }
+    }
+    if (index >= 0) return index;
+    return player.currentIndex >= 0 && player.currentIndex < _chapters.length
+        ? player.currentIndex
+        : -1;
   }
 
   Map<String, dynamic> _chapterToPlayerJson(Chapter chapter) {
@@ -538,7 +587,7 @@ class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
           index >= _chapters.length) {
         return;
       }
-      final target = (index * 56.0 + 8).clamp(
+      final target = (index * _chapterExtent).clamp(
         0.0,
         _scrollController.position.maxScrollExtent,
       );
@@ -555,17 +604,13 @@ class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
   void _focusCurrentChapter({bool force = false}) {
     if (!force && _focusedCurrent) return;
     final player = PlayerService.instance;
-    final currentChapterId = _currentChapterId(player);
-    if (currentChapterId.isEmpty || _chapters.isEmpty) return;
-    final index = _chapters.indexWhere(
-      (chapter) => chapter.chapterId == currentChapterId,
-    );
+    final index = _currentCatalogIndex(player);
     if (index < 0) return;
-    _focusedCurrent = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scrollController.hasClients) return;
+      _focusedCurrent = true;
       final viewport = _scrollController.position.viewportDimension;
-      final target = (index * 56.0 + 8 - viewport * 0.35).clamp(
+      final target = (index * _chapterExtent - viewport * 0.35).clamp(
         0.0,
         _scrollController.position.maxScrollExtent,
       );
@@ -621,13 +666,14 @@ class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
       ),
       body: !_initialized && _chapters.isEmpty
           ? const Center(child: CircularProgressIndicator())
-          : AnimatedBuilder(
-              animation: player,
-              builder: (context, _) {
+          : ValueListenableBuilder<int>(
+              valueListenable: player.miniMetaListenable,
+              builder: (context, _, _) {
                 if (_chapters.isEmpty) {
                   return _emptyState(cs);
                 }
                 final currentChapterId = _currentChapterId(player);
+                final currentCatalogIndex = _currentCatalogIndex(player);
                 return NotificationListener<ScrollNotification>(
                   onNotification: (notification) {
                     if (notification.metrics.pixels >=
@@ -641,6 +687,7 @@ class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
                   },
                   child: ListView.builder(
                     controller: _scrollController,
+                    itemExtent: _chapterExtent,
                     padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
                     itemCount: _chapters.length + 1,
                     itemBuilder: (context, index) {
@@ -663,7 +710,9 @@ class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
                         );
                       }
                       final chapter = _chapters[index];
-                      final selected = chapter.chapterId == currentChapterId;
+                      final selected =
+                          chapter.chapterId == currentChapterId ||
+                          index == currentCatalogIndex;
                       final cached = _cachedIds.contains(chapter.chapterId);
                       return _ChapterTile(
                         index: index,
@@ -772,7 +821,10 @@ class _ChapterTile extends StatelessWidget {
                 right: 14,
                 bottom: 6,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: cs.tertiaryContainer,
                     borderRadius: BorderRadius.circular(4),

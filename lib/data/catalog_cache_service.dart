@@ -20,6 +20,22 @@ class CachedCatalog {
   });
 }
 
+class CachedCatalogMeta {
+  final CatalogInfo info;
+  final int chapterCount;
+  final int page;
+  final int maxPage;
+  final bool hasMore;
+
+  const CachedCatalogMeta({
+    required this.info,
+    required this.chapterCount,
+    required this.page,
+    required this.maxPage,
+    required this.hasMore,
+  });
+}
+
 class CatalogCacheService {
   CatalogCacheService._();
   static final instance = CatalogCacheService._();
@@ -70,6 +86,29 @@ class CatalogCacheService {
     required String sourceId,
     required String bookId,
   }) async {
+    final meta = await loadMeta(sourceId: sourceId, bookId: bookId);
+    if (meta == null) return null;
+    final db = await getDb();
+    final chapters = await db.query(
+      'catalog_chapters',
+      where: 'sourceId = ? AND bookId = ?',
+      whereArgs: [sourceId, bookId],
+      orderBy: 'chapterIndex ASC',
+    );
+    if (chapters.isEmpty) return null;
+    return CachedCatalog(
+      info: meta.info,
+      chapters: chapters.map(_chapterFromRow).toList(),
+      page: meta.page,
+      maxPage: meta.maxPage,
+      hasMore: meta.hasMore,
+    );
+  }
+
+  Future<CachedCatalogMeta?> loadMeta({
+    required String sourceId,
+    required String bookId,
+  }) async {
     final db = await getDb();
     final books = await db.query(
       'catalog_books',
@@ -78,34 +117,53 @@ class CatalogCacheService {
       limit: 1,
     );
     if (books.isEmpty) return null;
-    final chapters = await db.query(
-      'catalog_chapters',
-      where: 'sourceId = ? AND bookId = ?',
-      whereArgs: [sourceId, bookId],
-      orderBy: 'chapterIndex ASC',
+    final countRows = await db.rawQuery(
+      '''SELECT COUNT(*) AS chapterCount FROM catalog_chapters
+         WHERE sourceId = ? AND bookId = ?''',
+      [sourceId, bookId],
     );
-    if (chapters.isEmpty) return null;
     final book = books.first;
-    return CachedCatalog(
+    final chapterCount =
+        (countRows.firstOrNull?['chapterCount'] as num?)?.toInt() ?? 0;
+    return CachedCatalogMeta(
       info: CatalogInfo(
         title: '${book['title'] ?? ''}',
         cover: '${book['cover'] ?? ''}',
         author: '${book['author'] ?? ''}',
-        trackCount: (book['trackCount'] as int?) ?? chapters.length,
+        trackCount: (book['trackCount'] as int?) ?? chapterCount,
         isFinished: book['isFinished'] == 1,
       ),
-      chapters: chapters
-          .map(
-            (row) => Chapter(
-              chapterId: '${row['chapterId'] ?? ''}',
-              index: (row['chapterIndex'] as int?) ?? 0,
-              name: '${row['name'] ?? ''}',
-            ),
-          )
-          .toList(),
+      chapterCount: chapterCount,
       page: (book['page'] as int?) ?? 1,
       maxPage: (book['maxPage'] as int?) ?? 1,
       hasMore: book['hasMore'] == 1,
+    );
+  }
+
+  Future<List<Chapter>> loadWindow({
+    required String sourceId,
+    required String bookId,
+    required int offset,
+    required int limit,
+  }) async {
+    if (limit <= 0) return const [];
+    final db = await getDb();
+    final rows = await db.query(
+      'catalog_chapters',
+      where: 'sourceId = ? AND bookId = ?',
+      whereArgs: [sourceId, bookId],
+      orderBy: 'chapterIndex ASC',
+      offset: offset < 0 ? 0 : offset,
+      limit: limit,
+    );
+    return rows.map(_chapterFromRow).toList(growable: false);
+  }
+
+  Chapter _chapterFromRow(Map<String, Object?> row) {
+    return Chapter(
+      chapterId: '${row['chapterId'] ?? ''}',
+      index: (row['chapterIndex'] as int?) ?? 0,
+      name: '${row['name'] ?? ''}',
     );
   }
 
@@ -144,8 +202,9 @@ class CatalogCacheService {
         'hasMore': hasMore ? 1 : 0,
         'updatedAt': now,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
+      final batch = txn.batch();
       for (final chapter in chapters) {
-        await txn.insert('catalog_chapters', {
+        batch.insert('catalog_chapters', {
           'sourceId': sourceId,
           'bookId': bookId,
           'chapterId': chapter.chapterId,
@@ -154,6 +213,7 @@ class CatalogCacheService {
           'cachedAt': now,
         }, conflictAlgorithm: ConflictAlgorithm.replace);
       }
+      await batch.commit(noResult: true);
     });
     LogService.instance.info(
       'CatalogCache',

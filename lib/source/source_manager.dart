@@ -341,6 +341,11 @@ class SourceManager {
   // 注册到 JS 引擎(幂等)
   Future<void> _ensureRegistered(Map<String, dynamic> s) async {
     final id = '${s['id']}';
+    SourceContract.requireSupportedApiVersion(
+      s['apiVersion'] ?? SourceContract.version,
+      sourceId: id,
+      sourceName: '${s['name'] ?? id}',
+    );
     if (!_registered.contains(id)) {
       final inflight = _registering[id];
       if (inflight != null) {
@@ -460,15 +465,21 @@ class SourceManager {
     final parsed = await JsEngine.instance.loadSource(code);
     final meta = {...parsed, ...?metaOverride};
     final id = meta['id']!;
+    final apiVersion = SourceContract.requireSupportedApiVersion(
+      meta['apiVersion'] ?? SourceContract.version,
+      sourceId: '$id',
+      sourceName: '${meta['name'] ?? id}',
+    );
     _registered.add(id);
     final idx = _stored.indexWhere((e) => '${e['id']}' == id);
     final entry = <String, dynamic>{
       'id': id,
       'name': meta['name'],
-      'apiVersion': meta['apiVersion'] ?? '${SourceContract.version}',
+      'apiVersion': apiVersion,
       'configFields': (meta['configFields'] as List?) ?? const [],
       'loginUrl': '${meta['loginUrl'] ?? ''}',
       'loginConfigKey': '${meta['loginConfigKey'] ?? ''}',
+      'supportsDiscover': meta['supportsDiscover'] == true,
       'code': code,
       'enabled': idx >= 0 ? _stored[idx]['enabled'] != false : true,
       'subscriptionId': subscriptionId.isNotEmpty
@@ -763,6 +774,7 @@ class SourceManager {
             'configFields',
             'loginUrl',
             'loginConfigKey',
+            'supportsDiscover',
           ])
             if (map.containsKey(key)) key: map[key],
         };
@@ -1117,6 +1129,7 @@ class SourceManager {
               ? (s['apiVersion'] as num).toInt()
               : (int.tryParse('${s['apiVersion']}') ?? SourceContract.version),
           configFields: _configFieldsOf(s),
+          supportsDiscover: s['supportsDiscover'] == true,
           active: '${s['id']}' == _activeId,
           enabled: s['enabled'] != false,
         ),
@@ -1234,6 +1247,26 @@ class SourceManager {
       chapterId,
     ]);
     return SourceContract.parseAudioResult(
+      ret,
+      sourceId: sourceId,
+      sourceName: '${s['name'] ?? sourceId}',
+    );
+  }
+
+  /// 调用音源的 discover() 获取首页/分类内容(音源可选实现)。
+  /// 音源未实现 discover 时抛出明确异常,供调用方降级处理。
+  Future<DiscoverResult> discoverFromSource(String sourceId) async {
+    final s = _stored.firstWhere(
+      (e) => '${e['id']}' == sourceId && e['enabled'] != false,
+      orElse: () => <String, dynamic>{},
+    );
+    if (s.isEmpty) throw Exception('音源未开启');
+    if (s['supportsDiscover'] != true) {
+      throw Exception('该音源未实现 discover');
+    }
+    await _ensureRegistered(s);
+    final ret = await JsEngine.instance.call(sourceId, 'discover', const []);
+    return SourceContract.parseDiscoverResult(
       ret,
       sourceId: sourceId,
       sourceName: '${s['name'] ?? sourceId}',

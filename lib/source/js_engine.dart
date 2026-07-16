@@ -4,6 +4,8 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:dio/dio.dart';
 import 'package:flutter_js/flutter_js.dart';
 
+import 'source_crypto.dart';
+
 /// 内嵌 JS 引擎(QuickJS):运行用户粘贴的 JS 音源脚本。
 /// - uni.request 经 http 通道桥接到 dio(支持自定义请求头)
 /// - 音源方法调用经 result 通道异步返回
@@ -44,6 +46,7 @@ class JsEngine {
         throw Exception('uni 垫片加载失败: ${r.stringResult}');
       }
       rt.onMessage('http', _handleHttp);
+      rt.onMessage('crypto', _handleCrypto);
       rt.onMessage('result', _handleResult);
       _rt = rt;
       _ready = true;
@@ -52,6 +55,34 @@ class JsEngine {
       _initFuture = null;
       completer.completeError(e, stack);
       rethrow;
+    }
+  }
+
+  // ── crypto 通道:提供与站点无关的通用加密能力 ──
+  void _handleCrypto(dynamic args) {
+    final m = (args is Map) ? args : const {};
+    final id = (m['id'] is num) ? (m['id'] as num).toInt() : 0;
+    unawaited(_doCrypto(id, m));
+  }
+
+  Future<void> _doCrypto(int id, Map<dynamic, dynamic> args) async {
+    try {
+      final operation = '${args['operation'] ?? ''}';
+      if (operation != 'aesCbcDecrypt') {
+        throw ArgumentError('不支持的加密操作: $operation');
+      }
+      final plainText = SourceCrypto.aesCbcDecrypt(
+        cipherText: '${args['cipherText'] ?? ''}',
+        key: '${args['key'] ?? ''}',
+        iv: '${args['iv'] ?? ''}',
+        inputEncoding: '${args['inputEncoding'] ?? 'base64'}',
+        keyEncoding: '${args['keyEncoding'] ?? 'base64'}',
+        ivEncoding: '${args['ivEncoding'] ?? 'base64'}',
+      );
+      final env = jsonEncode({'data': plainText});
+      _runtime.evaluate('__cryptoResolve($id, ${jsonEncode(env)})');
+    } catch (e) {
+      _runtime.evaluate('__cryptoReject($id, ${jsonEncode(e.toString())})');
     }
   }
 
@@ -165,6 +196,7 @@ class JsEngine {
       'configFields': (m['configFields'] as List?) ?? const [],
       'loginUrl': '${m['loginUrl'] ?? ''}',
       'loginConfigKey': '${m['loginConfigKey'] ?? ''}',
+      'supportsDiscover': m['supportsDiscover'] == true,
     };
   }
 

@@ -21,6 +21,9 @@ class LoginWebViewActivity : Activity() {
     private lateinit var progressBar: ProgressBar
     private var initialUrl = ""
     private var currentUrl = ""
+    private var storageKey = ""
+    private var storageValue = ""
+    private var pendingFinish = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -28,6 +31,7 @@ class LoginWebViewActivity : Activity() {
         currentUrl = initialUrl
         val title = intent.getStringExtra("title") ?: "音源登录"
         val userAgent = intent.getStringExtra("userAgent") ?: ""
+        storageKey = intent.getStringExtra("storageKey") ?: ""
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -100,6 +104,7 @@ class LoginWebViewActivity : Activity() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 currentUrl = url ?: currentUrl
                 CookieManager.getInstance().flush()
+                captureLocalStorage()
             }
         }
         webView.webChromeClient = object : WebChromeClient() {
@@ -112,6 +117,24 @@ class LoginWebViewActivity : Activity() {
         } else {
             webView.loadUrl(initialUrl)
         }
+    }
+
+    private fun captureLocalStorage() {
+        if (storageKey.isBlank() || !::webView.isInitialized) return
+        val js = "(function(){try{return localStorage.getItem('$storageKey')||''}catch(e){return ''}})()"
+        webView.evaluateJavascript(js) { value ->
+            storageValue = unwrapJsString(value)
+        }
+    }
+
+    private fun unwrapJsString(raw: String?): String {
+        if (raw.isNullOrBlank()) return ""
+        var v = raw.trim()
+        if (v.equals("null", true) || v == "\"\"") return ""
+        if (v.length >= 2 && v.startsWith("\"") && v.endsWith("\"")) {
+            v = v.substring(1, v.length - 1)
+        }
+        return v
     }
 
     override fun onBackPressed() {
@@ -130,10 +153,31 @@ class LoginWebViewActivity : Activity() {
     }
 
     private fun finishWithCookie(resultCode: Int) {
+        if (pendingFinish) return
+        pendingFinish = true
         CookieManager.getInstance().flush()
+        if (storageKey.isNotBlank() && storageValue.isBlank()) {
+            // 兜底：现场再读一次 localStorage（异步），拿到后再回结果
+            val js = "(function(){try{return localStorage.getItem('$storageKey')||''}catch(e){return ''}})()"
+            if (::webView.isInitialized) {
+                webView.evaluateJavascript(js) { value ->
+                    storageValue = unwrapJsString(value)
+                    deliverResult(resultCode)
+                }
+                return
+            }
+        }
+        deliverResult(resultCode)
+    }
+
+    private fun deliverResult(resultCode: Int) {
         val result = Intent().apply {
             putExtra("cookie", collectCookies())
             putExtra("url", currentUrl)
+            if (storageKey.isNotBlank()) {
+                putExtra("storageKey", storageKey)
+                putExtra("storageValue", storageValue)
+            }
         }
         setResult(resultCode, result)
         finish()
