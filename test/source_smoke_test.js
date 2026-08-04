@@ -5,6 +5,43 @@ const sourceFile = process.argv[2]
 const keyword = process.argv[3] || '剑来'
 const backend = process.argv[4] || ''
 
+function rotateLeft32(value, bits) {
+  return ((value << bits) | (value >>> (32 - bits))) >>> 0
+}
+
+function quarterRound(state, a, b, c, d) {
+  state[a] = (state[a] + state[b]) >>> 0
+  state[d] = rotateLeft32(state[d] ^ state[a], 16)
+  state[c] = (state[c] + state[d]) >>> 0
+  state[b] = rotateLeft32(state[b] ^ state[c], 12)
+  state[a] = (state[a] + state[b]) >>> 0
+  state[d] = rotateLeft32(state[d] ^ state[a], 8)
+  state[c] = (state[c] + state[d]) >>> 0
+  state[b] = rotateLeft32(state[b] ^ state[c], 7)
+}
+
+function hChaCha20(key, nonce) {
+  const state = new Uint32Array(16)
+  state.set([0x61707865, 0x3320646e, 0x79622d32, 0x6b206574])
+  for (let i = 0; i < 8; i++) state[4 + i] = key.readUInt32LE(i * 4)
+  for (let i = 0; i < 4; i++) state[12 + i] = nonce.readUInt32LE(i * 4)
+  for (let i = 0; i < 10; i++) {
+    quarterRound(state, 0, 4, 8, 12)
+    quarterRound(state, 1, 5, 9, 13)
+    quarterRound(state, 2, 6, 10, 14)
+    quarterRound(state, 3, 7, 11, 15)
+    quarterRound(state, 0, 5, 10, 15)
+    quarterRound(state, 1, 6, 11, 12)
+    quarterRound(state, 2, 7, 8, 13)
+    quarterRound(state, 3, 4, 9, 14)
+  }
+  const output = Buffer.alloc(32)
+  ;[0, 1, 2, 3, 12, 13, 14, 15].forEach((word, index) => {
+    output.writeUInt32LE(state[word], index * 4)
+  })
+  return output
+}
+
 if (!sourceFile) {
   throw new Error('Usage: node test/source_smoke_test.js <source.js> [keyword]')
 }
@@ -62,6 +99,36 @@ global.uni = {
         Buffer.concat([decipher.update(cipherText), decipher.final()])
           .toString('utf8')
       )
+    },
+    xChaCha20Poly1305Decrypt(options) {
+      const decode = (value, encoding) => Buffer.from(
+        String(value || ''),
+        encoding === 'utf8' || encoding === 'text' ? 'utf8' : encoding
+      )
+      const key = decode(options.key, options.keyEncoding || 'base64')
+      const nonce = decode(options.nonce, options.nonceEncoding || 'base64')
+      const encrypted = decode(
+        options.cipherText || options.data,
+        options.inputEncoding || 'base64'
+      )
+      if (key.length !== 32 || nonce.length !== 24 || encrypted.length < 16) {
+        return Promise.reject(new Error('无效的 XChaCha20-Poly1305 参数'))
+      }
+      const subKey = hChaCha20(key, nonce.subarray(0, 16))
+      const ietfNonce = Buffer.concat([Buffer.alloc(4), nonce.subarray(16)])
+      const tag = encrypted.subarray(encrypted.length - 16)
+      const cipherText = encrypted.subarray(0, encrypted.length - 16)
+      const decipher = crypto.createDecipheriv(
+        'chacha20-poly1305',
+        subKey,
+        ietfNonce,
+        { authTagLength: 16 }
+      )
+      decipher.setAuthTag(tag)
+      return Promise.resolve(
+        Buffer.concat([decipher.update(cipherText), decipher.final()])
+          .toString('utf8')
+      )
     }
   },
   getStorageSync() { return undefined },
@@ -71,6 +138,18 @@ global.uni = {
 const source = eval(fs.readFileSync(sourceFile, 'utf8'))
 
 async function main() {
+  if (process.argv.includes('--discover')) {
+    if (typeof source.discover !== 'function') throw new Error('音源没有 discover 方法')
+    const result = await source.discover()
+    if (!result.sections || !result.sections.length) throw new Error('发现页没有分区')
+    result.sections.forEach(section => {
+      if (!section.title || !section.list || !section.list.length) {
+        throw new Error('发现页分区格式无效')
+      }
+      console.log('discover:', section.title, section.list.length, section.list[0].title)
+    })
+    return
+  }
   const search = await source.search(keyword, 1, 3)
   if (!search.list || !search.list.length) throw new Error('搜索没有结果')
   const book = backend

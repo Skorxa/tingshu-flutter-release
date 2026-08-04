@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../data/cloud_auth_service.dart';
 import '../data/listening_stats_service.dart';
 import '../data/settings_service.dart';
 import 'alist_screen.dart';
+import 'background_protection_screen.dart';
 import 'baidu_pan_screen.dart';
 import 'cache_manage_screen.dart';
+import 'cloud_auth_screen.dart';
 import 'quark_pan_screen.dart';
 import 'runtime_log_screen.dart';
 import 'software_update_screen.dart';
@@ -68,17 +71,38 @@ class _SourceScreenState extends State<SourceScreen> {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          SliverAppBar.large(
-            title: const Text('设置'),
-            expandedHeight: 120,
-          ),
+          SliverAppBar.large(title: const Text('设置'), expandedHeight: 120),
           SliverToBoxAdapter(
             child: AnimatedBuilder(
-              animation: settings,
+              animation: Listenable.merge([
+                settings,
+                CloudAuthService.instance,
+              ]),
               builder: (context, _) => Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const _ListeningStatsCard(),
+
+                  _buildSection(
+                    title: '授权',
+                    icon: Icons.verified_user_outlined,
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.verified_user_outlined),
+                        title: const Text('设备授权'),
+                        subtitle: Text(
+                          _authorizationSubtitle(CloudAuthService.instance),
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const CloudAuthorizationScreen(),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
 
                   // 外观
                   _buildSection(
@@ -134,6 +158,19 @@ class _SourceScreenState extends State<SourceScreen> {
                     title: '播放',
                     icon: Icons.play_circle_outline,
                     children: [
+                      ListTile(
+                        leading: const Icon(Icons.security_outlined),
+                        title: const Text('后台播放保护'),
+                        subtitle: const Text('通知权限、电池优化与后台运行设置'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const BackgroundProtectionScreen(),
+                          ),
+                        ),
+                      ),
+                      const Divider(height: 1, indent: 56),
                       _buildSwitchTile(
                         icon: Icons.battery_saver_outlined,
                         title: 'Android 音频卸载',
@@ -191,7 +228,9 @@ class _SourceScreenState extends State<SourceScreen> {
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (_) => const WebDavScreen()),
+                          MaterialPageRoute(
+                            builder: (_) => const WebDavScreen(),
+                          ),
                         ),
                       ),
                       const Divider(height: 1, indent: 56),
@@ -202,7 +241,9 @@ class _SourceScreenState extends State<SourceScreen> {
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (_) => const AlistScreen()),
+                          MaterialPageRoute(
+                            builder: (_) => const AlistScreen(),
+                          ),
                         ),
                       ),
                       const Divider(height: 1, indent: 56),
@@ -299,7 +340,11 @@ class _SourceScreenState extends State<SourceScreen> {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: Row(
               children: [
-                Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
+                Icon(
+                  icon,
+                  size: 20,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   title,
@@ -329,11 +374,13 @@ class _SourceScreenState extends State<SourceScreen> {
       leading: Icon(icon),
       title: Text(title),
       subtitle: Text(subtitle),
-      trailing: Switch(
-        value: value,
-        onChanged: onChanged,
-      ),
+      trailing: Switch(value: value, onChanged: onChanged),
     );
+  }
+
+  String _authorizationSubtitle(CloudAuthService auth) {
+    final name = auth.license?.displayName.trim() ?? '';
+    return name.isEmpty ? auth.stateLabel : '${auth.stateLabel} · $name';
   }
 }
 
@@ -351,10 +398,7 @@ class _ListeningStatsCard extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [
-              cs.primaryContainer,
-              cs.secondaryContainer,
-            ],
+            colors: [cs.primaryContainer, cs.secondaryContainer],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -432,10 +476,7 @@ class _StatsBadge extends StatelessWidget {
         const SizedBox(width: 6),
         Text(
           '$label: ',
-          style: TextStyle(
-            fontSize: 13,
-            color: color.withValues(alpha: 0.8),
-          ),
+          style: TextStyle(fontSize: 13, color: color.withValues(alpha: 0.8)),
         ),
         Text(
           value,

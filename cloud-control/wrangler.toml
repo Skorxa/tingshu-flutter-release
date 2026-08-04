@@ -1,0 +1,30 @@
+name = "juting-cloud-control"
+main = "src/index.ts"
+compatibility_date = "2026-07-26"
+
+[vars]
+APP_NAME = "橘听"
+ADMIN_EMAILS = ""
+ACCESS_TOKEN_TTL_SECONDS = "1800"
+REFRESH_TOKEN_TTL_SECONDS = "2592000"
+ADMIN_SESSION_TTL_SECONDS = "28800"
+OFFLINE_GRACE_SECONDS = "172800"
+CONFIG_OBJECT_KEY = "control/config.json"
+SUBSCRIPTION_OBJECT_KEY = "sources/subscription.json"
+SOURCE_PREFIX = "sources/files/"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "cl"
+database_id = "55502313-5775-4f2c-90c3-f705d5362f30"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "PRIVATE_BUCKET"
+bucket_name = "juting-private"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+html_handling = "none"
+run_worker_first = ["/api/*", "/admin", "/admin/*", "/health"]

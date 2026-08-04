@@ -68,17 +68,29 @@ class JsEngine {
   Future<void> _doCrypto(int id, Map<dynamic, dynamic> args) async {
     try {
       final operation = '${args['operation'] ?? ''}';
-      if (operation != 'aesCbcDecrypt') {
-        throw ArgumentError('不支持的加密操作: $operation');
+      late final String plainText;
+      switch (operation) {
+        case 'aesCbcDecrypt':
+          plainText = SourceCrypto.aesCbcDecrypt(
+            cipherText: '${args['cipherText'] ?? ''}',
+            key: '${args['key'] ?? ''}',
+            iv: '${args['iv'] ?? ''}',
+            inputEncoding: '${args['inputEncoding'] ?? 'base64'}',
+            keyEncoding: '${args['keyEncoding'] ?? 'base64'}',
+            ivEncoding: '${args['ivEncoding'] ?? 'base64'}',
+          );
+        case 'xChaCha20Poly1305Decrypt':
+          plainText = SourceCrypto.xChaCha20Poly1305Decrypt(
+            cipherText: '${args['cipherText'] ?? ''}',
+            key: '${args['key'] ?? ''}',
+            nonce: '${args['nonce'] ?? ''}',
+            inputEncoding: '${args['inputEncoding'] ?? 'base64'}',
+            keyEncoding: '${args['keyEncoding'] ?? 'base64'}',
+            nonceEncoding: '${args['nonceEncoding'] ?? 'base64'}',
+          );
+        default:
+          throw ArgumentError('不支持的加密操作: $operation');
       }
-      final plainText = SourceCrypto.aesCbcDecrypt(
-        cipherText: '${args['cipherText'] ?? ''}',
-        key: '${args['key'] ?? ''}',
-        iv: '${args['iv'] ?? ''}',
-        inputEncoding: '${args['inputEncoding'] ?? 'base64'}',
-        keyEncoding: '${args['keyEncoding'] ?? 'base64'}',
-        ivEncoding: '${args['ivEncoding'] ?? 'base64'}',
-      );
       final env = jsonEncode({'data': plainText});
       _runtime.evaluate('__cryptoResolve($id, ${jsonEncode(env)})');
     } catch (e) {

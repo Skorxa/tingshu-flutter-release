@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/catalog_cache_service.dart';
+import '../data/cloud_auth_service.dart';
 import '../data/log_service.dart';
 import 'js_engine.dart';
 import 'models.dart';
@@ -380,11 +381,48 @@ class SourceManager {
     Map<String, dynamic> raw,
     List<SourceConfigField> fields,
   ) {
+    final normalized = Map<String, dynamic>.from(raw);
+    for (final field in fields) {
+      final type = field.type.toLowerCase();
+      if ((type == 'account_list' || type == 'accounts') &&
+          !normalized.containsKey(field.key)) {
+        final migrated = _legacyAccountList(raw);
+        if (migrated.isNotEmpty) normalized[field.key] = migrated;
+      }
+    }
     final allowed = fields.map((field) => field.key).toSet();
     if (allowed.isEmpty) return <String, dynamic>{};
     return Map<String, dynamic>.fromEntries(
-      raw.entries.where((entry) => allowed.contains(entry.key)),
+      normalized.entries.where((entry) => allowed.contains(entry.key)),
     );
+  }
+
+  List<Map<String, String>> _legacyAccountList(Map<String, dynamic> raw) {
+    final indexes = <int>{};
+    final pattern = RegExp(r'^(?:account|email)(\d+)$');
+    for (final key in raw.keys) {
+      final match = pattern.firstMatch(key);
+      final index = match == null ? null : int.tryParse(match.group(1)!);
+      if (index != null) indexes.add(index);
+    }
+
+    final result = <Map<String, String>>[];
+    final sortedIndexes = indexes.toList()..sort();
+    for (final index in sortedIndexes) {
+      final email = '${raw['account$index'] ?? raw['email$index'] ?? ''}'
+          .trim();
+      final password = '${raw['password$index'] ?? ''}'.trim();
+      if (email.isEmpty && password.isEmpty) continue;
+      result.add({'email': email, 'password': password});
+    }
+    if (result.isEmpty) {
+      final email = '${raw['account'] ?? raw['email'] ?? ''}'.trim();
+      final password = '${raw['password'] ?? ''}'.trim();
+      if (email.isNotEmpty || password.isNotEmpty) {
+        result.add({'email': email, 'password': password});
+      }
+    }
+    return result;
   }
 
   Future<void> _applyConfig(Map<String, dynamic> s) async {
@@ -874,8 +912,16 @@ class SourceManager {
         responseType: ResponseType.plain,
         receiveTimeout: const Duration(seconds: 30),
         validateStatus: (_) => true,
-        headers: request.headers,
+        headers: await _headersForSubscriptionRequest(
+          request,
+          request.requestUrl,
+        ),
       ),
+    );
+    await _handleManagedRequestFailure(
+      request.requestUrl,
+      resp.statusCode ?? 0,
+      resp.data,
     );
     if ((resp.statusCode ?? 0) < 200 || (resp.statusCode ?? 0) >= 300) {
       throw Exception('订阅请求失败:${resp.statusCode}');
@@ -931,8 +977,13 @@ class SourceManager {
         responseType: ResponseType.plain,
         receiveTimeout: const Duration(seconds: 30),
         validateStatus: (_) => true,
-        headers: request.headers,
+        headers: await _headersForSubscriptionRequest(request, sourceUrl),
       ),
+    );
+    await _handleManagedRequestFailure(
+      sourceUrl,
+      resp.statusCode ?? 0,
+      resp.data,
     );
     if ((resp.statusCode ?? 0) < 200 || (resp.statusCode ?? 0) >= 300) {
       throw Exception('音源 JS 请求失败:${resp.statusCode} $sourceUrl');
@@ -940,6 +991,35 @@ class SourceManager {
     final code = resp.data ?? '';
     if (code.trim().isEmpty) throw Exception('音源 JS 为空:$sourceUrl');
     return code;
+  }
+
+  Future<Map<String, String>?> _headersForSubscriptionRequest(
+    _SubscriptionRequest request,
+    String url,
+  ) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
+      throw Exception('订阅资源地址无效:$url');
+    }
+    final headers = <String, String>{...?request.headers};
+    headers.addAll(
+      await CloudAuthService.instance.headersForRequest('GET', uri),
+    );
+    return headers.isEmpty ? null : headers;
+  }
+
+  Future<void> _handleManagedRequestFailure(
+    String url,
+    int statusCode,
+    dynamic responseBody,
+  ) async {
+    if (statusCode != 401 && statusCode != 403) return;
+    final uri = Uri.tryParse(url);
+    if (uri == null || !CloudAuthService.instance.isManagedUri(uri)) return;
+    await CloudAuthService.instance.handleProtectedFailure(
+      statusCode,
+      responseBody,
+    );
   }
 
   String _resolveUrl(String baseUrl, String value) {

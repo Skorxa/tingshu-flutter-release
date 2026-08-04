@@ -335,7 +335,8 @@ class _CacheManageScreenState extends State<CacheManageScreen> {
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
-                    (context, index) => _bookTile(context, snapshot.books[index]),
+                    (context, index) =>
+                        _bookTile(context, snapshot.books[index]),
                     childCount: snapshot.books.length,
                   ),
                 ),
@@ -378,8 +379,8 @@ class _CacheManageScreenState extends State<CacheManageScreen> {
           const SizedBox(height: 12),
           _settingRow(
             icon: Icons.download_for_offline_outlined,
-            title: '自动缓存后续章节',
-            subtitle: '播放时从当前集往后缓存',
+            title: '自动缓存当前及后续章节',
+            subtitle: '缓存数量从当前正在播放的集数开始计算',
             trailing: Switch(
               value: settings.autoCache,
               onChanged: settings.setAutoCache,
@@ -389,7 +390,7 @@ class _CacheManageScreenState extends State<CacheManageScreen> {
           _settingRow(
             icon: Icons.format_list_numbered,
             title: '每本书最大缓存集数',
-            subtitle: '${settings.maxCacheChapters} 集',
+            subtitle: '${settings.maxCacheChapters} 集（包含当前集）',
             trailing: const Icon(Icons.chevron_right, size: 20),
             onTap: () => _chooseInt(
               title: '每本书最大缓存集数',
@@ -485,9 +486,7 @@ class _CacheManageScreenState extends State<CacheManageScreen> {
                   ? null
                   : () => _setAllSelected(!allSelected),
               icon: Icon(
-                allSelected
-                    ? Icons.check_box_outline_blank
-                    : Icons.select_all,
+                allSelected ? Icons.check_box_outline_blank : Icons.select_all,
               ),
               label: Text(allSelected ? '取消全选' : '全选'),
             ),

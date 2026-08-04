@@ -8,7 +8,16 @@
   configFields: [
     { key: 'qt_cookie', label: '青天 Cookie', type: 'textarea', hint: '可通过音源登录页自动获取。', login: true, required: true }
   ],
-  _bases: ['http://101.35.133.34:8888', 'http://103.236.91.147:8888'],
+  _bases: [
+    'https://v1.gyks.cf',
+    'https://v2.gyks.cf',
+    'https://v3.gyks.cf',
+    'https://v4.gyks.cf',
+    'https://v5.gyks.cf',
+    'https://v6.gyks.cf',
+    'https://v7.gyks.cf',
+    'http://101.35.133.34:8888'
+  ],
   _sub: '喜马拉雅',
   _ua: 'okhttp/4.9.2',
 

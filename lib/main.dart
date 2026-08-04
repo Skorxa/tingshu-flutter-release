@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:audio_service/audio_service.dart';
 
 import 'data/baidu_pan_service.dart';
-import 'data/cache_service.dart';
+import 'data/cloud_auth_service.dart';
 import 'data/db.dart';
 import 'data/listening_stats_service.dart';
 import 'data/log_service.dart';
@@ -15,6 +15,7 @@ import 'player/audio_handler.dart';
 import 'player/player_service.dart';
 import 'source/source_manager.dart';
 import 'screens/discover_screen.dart';
+import 'screens/cloud_auth_screen.dart';
 import 'screens/search_screen.dart';
 import 'screens/shelf_screen.dart';
 import 'screens/source_screen.dart';
@@ -37,8 +38,11 @@ Future<void> main() async {
     config: const AudioServiceConfig(
       androidNotificationChannelId: 'com.tingshu.audio',
       androidNotificationChannelName: '橘听',
+      androidNotificationChannelDescription: '听书播放控制与后台播放',
       androidNotificationOngoing: true,
       androidStopForegroundOnPause: true,
+      artDownscaleWidth: 512,
+      artDownscaleHeight: 512,
     ),
   );
   PlayerService.instance.attachHandler(audioHandler);
@@ -59,6 +63,21 @@ Future<void> main() async {
     LogService.instance.info('Database', '数据库初始化完成');
   } catch (e, stack) {
     LogService.instance.error('Database', '数据库初始化失败', error: e, stack: stack);
+  }
+  try {
+    await CloudAuthService.instance.init();
+    LogService.instance.info(
+      'CloudAuth',
+      '云端授权服务初始化完成',
+      detail: '状态: ${CloudAuthService.instance.stateLabel}',
+    );
+  } catch (e, stack) {
+    LogService.instance.error(
+      'CloudAuth',
+      '云端授权服务初始化失败',
+      error: e,
+      stack: stack,
+    );
   }
   try {
     await SourceManager.instance.init();
@@ -91,17 +110,6 @@ Future<void> main() async {
     LogService.instance.error('Alist', '配置加载失败', error: e, stack: stack);
   }
   ThemeService.instance; // 触发构造:启动封面取色监听
-  try {
-    await PlayerService.instance.restoreLastSession();
-    LogService.instance.info('Player', '上次播放恢复完成');
-  } catch (e, stack) {
-    LogService.instance.error('Player', '上次播放恢复失败', error: e, stack: stack);
-  }
-  try {
-    await CacheService.instance.restorePending();
-  } catch (e, stack) {
-    LogService.instance.error('Cache', '自动缓存任务恢复失败', error: e, stack: stack);
-  }
   runApp(const TingshuApp());
 }
 
@@ -129,7 +137,7 @@ class TingshuApp extends StatelessWidget {
         themeMode: SettingsService.instance.darkMode
             ? ThemeMode.dark
             : ThemeMode.light,
-        home: const HomeShell(),
+        home: const CloudAuthGate(child: HomeShell()),
       ),
     );
   }

@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>橘听云控</title>
+    <link rel="stylesheet" href="/admin/styles.css">
+  </head>
+  <body>
+    <main id="loginView" class="login-shell" hidden>
+      <section class="login-panel" aria-labelledby="loginTitle">
+        <div class="brand-mark" aria-hidden="true">橘</div>
+        <h1 id="loginTitle">橘听云控</h1>
+        <form id="loginForm">
+          <label for="adminPassword">管理员密码</label>
+          <input id="adminPassword" name="password" type="password" autocomplete="current-password" required>
+          <button class="primary wide" type="submit">登录</button>
+        </form>
+        <p id="loginError" class="form-error" role="alert"></p>
+      </section>
+    </main>
+
+    <div id="appView" class="app-shell" hidden>
+      <header class="topbar">
+        <div class="brand-row">
+          <div class="brand-mark small" aria-hidden="true">橘</div>
+          <div>
+            <strong>橘听云控</strong>
+            <span id="adminIdentity" class="muted"></span>
+          </div>
+        </div>
+        <div class="top-actions">
+          <span id="serviceStatus" class="status-dot">运行中</span>
+          <button id="refreshAll" class="quiet" type="button">刷新</button>
+          <button id="logoutButton" class="quiet" type="button">退出</button>
+        </div>
+      </header>
+
+      <div class="workspace">
+        <nav class="sidebar" aria-label="云控导航">
+          <button class="nav-item active" data-view="users" type="button">用户</button>
+          <button class="nav-item" data-view="invites" type="button">邀请码</button>
+          <button class="nav-item" data-view="sources" type="button">云端音源</button>
+          <button class="nav-item" data-view="config" type="button">云控配置</button>
+          <button class="nav-item" data-view="audit" type="button">审计日志</button>
+        </nav>
+
+        <main class="content">
+          <section class="metrics" aria-label="授权概览">
+            <div class="metric"><span>用户总数</span><strong id="metricUsers">-</strong></div>
+            <div class="metric"><span>正常授权</span><strong id="metricActiveUsers">-</strong></div>
+            <div class="metric"><span>活跃设备</span><strong id="metricDevices">-</strong></div>
+            <div class="metric"><span>可用邀请码</span><strong id="metricInvites">-</strong></div>
+          </section>
+
+          <section id="usersView" class="view-section">
+            <div class="section-heading">
+              <div><h2>用户</h2><p>管理授权状态、期限与设备。</p></div>
+              <div class="filters">
+                <input id="userSearch" type="search" placeholder="搜索用户或 ID" aria-label="搜索用户">
+                <select id="userStatus" aria-label="用户状态">
+                  <option value="">全部状态</option>
+                  <option value="active">正常</option>
+                  <option value="disabled">已禁用</option>
+                </select>
+                <button id="searchUsers" type="button">查询</button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>用户</th><th>状态</th><th>到期时间</th><th>设备</th><th>最近在线</th><th class="actions-col">操作</th></tr></thead>
+                <tbody id="usersBody"></tbody>
+              </table>
+            </div>
+            <p id="usersEmpty" class="empty" hidden>暂无用户</p>
+          </section>
+
+          <section id="invitesView" class="view-section" hidden>
+            <div class="section-heading">
+              <div><h2>邀请码</h2><p>创建和撤销设备激活邀请码。</p></div>
+              <button id="openInviteDialog" class="primary" type="button">新建邀请码</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>用途</th><th>状态</th><th>使用次数</th><th>授权期限</th><th>邀请码到期</th><th class="actions-col">操作</th></tr></thead>
+                <tbody id="invitesBody"></tbody>
+              </table>
+            </div>
+            <p id="invitesEmpty" class="empty" hidden>暂无邀请码</p>
+          </section>
+
+          <section id="configView" class="view-section" hidden>
+            <div class="section-heading">
+              <div><h2>云控配置</h2><p>保存后由已授权设备读取。</p></div>
+              <button id="saveConfig" class="primary" type="button">保存配置</button>
+            </div>
+            <label class="field-label" for="configEditor">JSON 配置</label>
+            <textarea id="configEditor" class="code-editor" spellcheck="false"></textarea>
+            <p id="configMeta" class="muted"></p>
+          </section>
+
+          <section id="sourcesView" class="view-section" hidden>
+            <div class="section-heading">
+              <div><h2>云端音源</h2><p>管理私有 R2 中的订阅清单与 JavaScript 音源。</p></div>
+              <button id="refreshSources" type="button">刷新列表</button>
+            </div>
+            <div class="source-summary" aria-label="音源订阅概览">
+              <div><span>订阅版本</span><strong id="sourceVersion">-</strong></div>
+              <div><span>清单音源</span><strong id="sourceManifestCount">-</strong></div>
+              <div><span>云端文件</span><strong id="sourceObjectCount">-</strong></div>
+              <div><span>更新时间</span><strong id="sourceUpdatedAt">-</strong></div>
+            </div>
+            <label class="field-label" for="subscriptionUrl">订阅链接</label>
+            <div class="subscription-link-row">
+              <input id="subscriptionUrl" type="url" readonly>
+              <button id="copySubscriptionUrl" type="button">复制链接</button>
+            </div>
+            <div class="source-upload-row">
+              <label class="file-picker" for="sourceFiles">选择 JS 音源</label>
+              <input id="sourceFiles" type="file" accept=".js,text/javascript,application/javascript" multiple hidden>
+              <span id="sourceSelection" class="muted">未选择文件</span>
+              <button id="uploadSources" class="primary" type="button" disabled>上传或覆盖</button>
+            </div>
+            <div class="table-wrap source-table-wrap">
+              <table>
+                <thead><tr><th>文件名</th><th>清单状态</th><th>大小</th><th>上传时间</th><th class="actions-col">操作</th></tr></thead>
+                <tbody id="sourcesBody"></tbody>
+              </table>
+            </div>
+            <p id="sourcesEmpty" class="empty" hidden>暂无云端音源</p>
+          </section>
+
+          <section id="auditView" class="view-section" hidden>
+            <div class="section-heading">
+              <div><h2>审计日志</h2><p>记录激活、禁用和配置修改。</p></div>
+              <button id="refreshAudit" type="button">刷新日志</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>时间</th><th>操作者</th><th>动作</th><th>目标</th><th>详情</th></tr></thead>
+                <tbody id="auditBody"></tbody>
+              </table>
+            </div>
+            <p id="auditEmpty" class="empty" hidden>暂无日志</p>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <dialog id="inviteDialog">
+      <form id="inviteForm" method="dialog">
+        <div class="dialog-heading"><h2>新建邀请码</h2><button class="close-button" value="cancel" aria-label="关闭" type="submit">×</button></div>
+        <div class="form-grid">
+          <label>用途名称<input name="label" maxlength="80" value="新用户" required></label>
+          <label>邀请码有效天数<input name="expiresDays" type="number" min="0" max="365" value="7" required></label>
+          <label>授权有效天数<input name="authorizationDays" type="number" min="0" max="3650" value="365" required></label>
+          <label>最多使用次数<input name="maxUses" type="number" min="1" max="100" value="1" required></label>
+          <label>每用户设备上限<input name="maxDevices" type="number" min="1" max="20" value="1" required></label>
+        </div>
+        <div class="dialog-actions"><button value="cancel" type="submit">取消</button><button id="createInvite" class="primary" value="default" type="submit">创建</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="inviteResultDialog">
+      <div class="dialog-heading"><h2>邀请码已创建</h2><button id="closeInviteResult" class="close-button" aria-label="关闭" type="button">×</button></div>
+      <div class="invite-code-row"><code id="createdInviteCode"></code><button id="copyInviteCode" type="button">复制</button></div>
+    </dialog>
+
+    <dialog id="userDialog">
+      <form id="userForm" method="dialog">
+        <div class="dialog-heading"><h2>用户设置</h2><button class="close-button" value="cancel" aria-label="关闭" type="submit">×</button></div>
+        <input id="editUserId" type="hidden">
+        <div class="form-grid">
+          <label>显示名称<input id="editDisplayName" maxlength="50" required></label>
+          <label>设备上限<input id="editMaxDevices" type="number" min="1" max="20" required></label>
+          <label class="full">到期时间<input id="editExpiresAt" type="datetime-local"></label>
+        </div>
+        <h3>设备</h3>
+        <div id="deviceList" class="device-list"></div>
+        <div class="dialog-actions"><button value="cancel" type="submit">取消</button><button id="saveUser" class="primary" value="default" type="submit">保存</button></div>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <script src="/admin/app.js" type="module"></script>
+  </body>
+</html>

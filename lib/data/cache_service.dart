@@ -130,6 +130,7 @@ class CacheService extends ChangeNotifier {
   Timer? _countdownTimer;
   bool _syncing = false;
   bool _restored = false;
+  bool _authorizationSuspended = false;
   int _cacheVersion = 0;
   DateTime? _nextRunAt;
 
@@ -146,11 +147,43 @@ class CacheService extends ChangeNotifier {
 
   bool get syncing => _syncing;
   int get cacheVersion => _cacheVersion;
+  bool get authorizationSuspended => _authorizationSuspended;
+
+  @visibleForTesting
+  static ({int start, int end}) computeCacheWindow({
+    required int currentIndex,
+    required int chapterCount,
+    required int maxChapters,
+  }) {
+    if (chapterCount <= 0 || maxChapters <= 0) return (start: 0, end: 0);
+    final start = currentIndex.clamp(0, chapterCount - 1);
+    final end = (start + maxChapters).clamp(start, chapterCount);
+    return (start: start, end: end);
+  }
 
   bool get countdownVisible =>
+      !_authorizationSuspended &&
       SettingsService.instance.autoCache &&
       _bookId.isNotEmpty &&
       _currentIndex >= 0;
+
+  void suspendForAuthorization() {
+    if (_authorizationSuspended) return;
+    _authorizationSuspended = true;
+    _timer?.cancel();
+    _timer = null;
+    _nextRunAt = null;
+    _stopCountdownTicker();
+    notifyListeners();
+    LogService.instance.info('Cache', '授权不可用，已暂停自动缓存');
+  }
+
+  void resumeAfterAuthorization() {
+    if (!_authorizationSuspended) return;
+    _authorizationSuspended = false;
+    _schedule();
+    LogService.instance.info('Cache', '授权恢复，自动缓存可以继续运行');
+  }
 
   Duration? get nextRunRemaining {
     final next = _nextRunAt;
@@ -161,7 +194,7 @@ class CacheService extends ChangeNotifier {
 
   String get countdownLabel {
     if (!countdownVisible) return '';
-    if (_syncing) return '正在缓存后续章节...';
+    if (_syncing) return '正在缓存当前及后续章节...';
     final remaining = nextRunRemaining;
     if (remaining == null) return '等待自动缓存';
     final minutes = remaining.inMinutes.toString().padLeft(2, '0');
@@ -479,7 +512,7 @@ class CacheService extends ChangeNotifier {
       'Cache',
       '自动缓存任务已恢复',
       detail:
-          '书名: $_bookTitle\n章节: ${chapters[currentIndex]['name'] ?? ''}\n后续章节: ${chapters.length - currentIndex - 1}',
+          '书名: $_bookTitle\n章节: ${chapters[currentIndex]['name'] ?? ''}\n当前及后续章节: ${chapters.length - currentIndex}',
     );
     return true;
   }
@@ -535,7 +568,10 @@ class CacheService extends ChangeNotifier {
     _timer?.cancel();
     _timer = null;
     final settings = SettingsService.instance;
-    if (!settings.autoCache || _bookId.isEmpty || _currentIndex < 0) {
+    if (_authorizationSuspended ||
+        !settings.autoCache ||
+        _bookId.isEmpty ||
+        _currentIndex < 0) {
       _nextRunAt = null;
       _stopCountdownTicker();
       unawaited(_persistState());
@@ -558,7 +594,7 @@ class CacheService extends ChangeNotifier {
       'Cache',
       '启动自动缓存定时器',
       detail:
-          '频率: ${settings.cacheFrequencyLabel}\n后续章节数: ${settings.maxCacheChapters}',
+          '频率: ${settings.cacheFrequencyLabel}\n缓存章节数（含当前集）: ${settings.maxCacheChapters}',
     );
     _timer = Timer(delay, () async {
       await syncFollowing();
@@ -584,14 +620,14 @@ class CacheService extends ChangeNotifier {
   }
 
   Future<void> triggerNow() async {
-    if (!countdownVisible || _syncing) return;
+    if (_authorizationSuspended || !countdownVisible || _syncing) return;
     _timer?.cancel();
     _timer = null;
     _nextRunAt = null;
     notifyListeners();
     LogService.instance.info(
       'Cache',
-      '手动触发后续章节缓存',
+      '手动触发当前及后续章节缓存',
       detail: '书名: $_bookTitle\n音源: $_sourceId\n当前章节序号: ${_currentIndex + 1}',
     );
     await syncFollowing();
@@ -600,7 +636,8 @@ class CacheService extends ChangeNotifier {
 
   Future<void> syncFollowing() async {
     final settings = SettingsService.instance;
-    if (!settings.autoCache ||
+    if (_authorizationSuspended ||
+        !settings.autoCache ||
         _syncing ||
         _bookId.isEmpty ||
         _currentIndex < 0) {
@@ -611,18 +648,24 @@ class CacheService extends ChangeNotifier {
     _syncing = true;
     notifyListeners();
     try {
-      final start = context.currentIndex + 1;
-      final end = (start + settings.maxCacheChapters).clamp(
-        0,
-        context.chapters.length,
+      final window = computeCacheWindow(
+        currentIndex: context.currentIndex,
+        chapterCount: context.chapters.length,
+        maxChapters: settings.maxCacheChapters,
       );
+      final start = window.start;
+      final end = window.end;
       LogService.instance.info(
         'Cache',
-        '开始同步后续章节缓存',
+        '开始同步当前及后续章节缓存',
         detail:
-            '书名: ${context.bookTitle}\n范围: ${start + 1} - $end\n上限: ${settings.maxCacheChapters}',
+            '书名: ${context.bookTitle}\n范围: ${start + 1} - $end（含当前集）\n上限: ${settings.maxCacheChapters}',
       );
       for (var i = start; i < end; i++) {
+        if (_authorizationSuspended) {
+          LogService.instance.info('Cache', '授权不可用，停止本轮缓存');
+          break;
+        }
         if (!_samePlaybackContext(context)) {
           LogService.instance.info(
             'Cache',
@@ -641,15 +684,29 @@ class CacheService extends ChangeNotifier {
                 null) {
           continue;
         }
+        var usedSniff = false;
         try {
-          await _downloadChapter(context, chapter, i);
+          await _downloadChapter(
+            context,
+            chapter,
+            i,
+            onSniff: () => usedSniff = true,
+          );
         } catch (e, stack) {
           LogService.instance.error(
             'Cache',
-            '章节缓存失败，继续后续任务',
+            usedSniff ? '嗅探章节缓存失败，本轮停止' : '章节缓存失败，继续后续任务',
             error: e,
             stack: stack,
           );
+        }
+        if (usedSniff) {
+          LogService.instance.info(
+            'Cache',
+            '嗅探型音源本轮缓存结束',
+            detail: '每轮只嗅探一章，后续章节将在下个缓存周期继续',
+          );
+          break;
         }
       }
       await cleanup();
@@ -662,8 +719,9 @@ class CacheService extends ChangeNotifier {
   Future<void> _downloadChapter(
     _PlaybackCacheContext context,
     Map<String, dynamic> chapter,
-    int index,
-  ) async {
+    int index, {
+    void Function()? onSniff,
+  }) async {
     final chapterId = '${chapter['chapterId'] ?? ''}';
     var audioUrl = '${chapter['audioUrl'] ?? ''}';
     var audioHeaders = <String, String>{};
@@ -700,6 +758,7 @@ class CacheService extends ChangeNotifier {
             )
           : await SourceManager.instance.getAudioUrl(chapterId);
       if (audio.needsSniff) {
+        onSniff?.call();
         final sniffed = await SniffService.instance.sniff(audio.sniff!);
         audioUrl = sniffed.url;
         audioHeaders = sniffed.headers;

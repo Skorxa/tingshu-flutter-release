@@ -1,15 +1,19 @@
 // 听优有声（tingyou.fm）HTML + 嗅探源
 // 接口:
 //   search        GET /search/result?keyword=&page=     → SSR HTML, 解析 .list-item
+//   discover      GET /api/payload + 分类加密接口       → XChaCha20-Poly1305 解密
 //   getChapters   GET /audios/{albumId}/1                → 解析章节页 __NUXT_DATA__（明文全量章节）
-//   getAudioUrl   返回 sniff 指令, App 用内置 WebView 打开播放页, 抓 file.hgeuz.cn/stream 直链
+//   getAudioUrl   返回 sniff 指令, App 用后台隐藏 WebView 加载播放页, 抓 file.hgeuz.cn/stream 直链
 // 鉴权: 无 | 站点为 Nuxt SSR, 数据接口(album_chapters)是加密 payload, 故走页面解析 + 嗅探
 ({
   name: '听优有声',
   id: 'tingyou',
   apiVersion: 1,
   _base: 'https://tingyou.fm',
+  _payloadUrl: 'https://www.tingyou.fm/api/payload',
   _ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+  _payloadConfig: null,
+  _payloadConfigAt: 0,
 
   // ── 公共 GET, 统一判状态码, 返回 HTML 文本 ──
   _get(path) {
@@ -26,6 +30,141 @@
         fail: e => reject(new Error(e.errMsg || '网络失败')),
       })
     })
+  },
+
+  _getJson(url, timeout = 12000) {
+    return new Promise((resolve, reject) => {
+      uni.request({
+        url,
+        method: 'GET',
+        header: { 'User-Agent': this._ua, Referer: this._base + '/' },
+        timeout,
+        success: r => {
+          if (r.statusCode < 200 || r.statusCode >= 300) {
+            reject(new Error('HTTP ' + r.statusCode + ' | ' + url))
+            return
+          }
+          try {
+            resolve(typeof r.data === 'string' ? JSON.parse(r.data) : r.data)
+          } catch (_) {
+            reject(new Error('JSON 解析失败 | ' + url))
+          }
+        },
+        fail: e => reject(new Error(e.errMsg || '网络失败')),
+      })
+    })
+  },
+
+  async _getPayloadConfig(force = false) {
+    const now = Date.now()
+    if (!force && this._payloadConfig && now - this._payloadConfigAt < 5 * 60 * 1000) {
+      return this._payloadConfig
+    }
+    const data = await this._getJson(this._payloadUrl)
+    const payload = data && data.payload || {}
+    const pool = data && data.staticRoutePools && data.staticRoutePools.category_page || {}
+    const key = String(payload.key || '').trim()
+    const routes = [pool.primary].concat(Array.isArray(pool.backups) ? pool.backups : [])
+      .map(x => String(x || '').replace(/\/+$/, ''))
+      .filter((x, i, all) => /^https?:\/\//.test(x) && all.indexOf(x) === i)
+    if (!/^[0-9a-f]{64}$/i.test(key)) throw new Error('分类接口没有返回有效的动态密钥')
+    if (!routes.length) throw new Error('分类接口没有返回可用线路')
+    this._payloadConfig = { key, routes }
+    this._payloadConfigAt = now
+    return this._payloadConfig
+  },
+
+  async _decryptPayload(data, key) {
+    const envelope = data && typeof data === 'object' ? data.payload : ''
+    const raw = String(envelope || '').replace(/^0x/i, '').trim()
+    if (!/^[0-9a-f]+$/i.test(raw) || raw.length < 2 + 48 + 32 || raw.length % 2 !== 0) {
+      throw new Error('分类接口返回了无效的加密 payload')
+    }
+    const version = parseInt(raw.slice(0, 2), 16)
+    const nonce = raw.slice(2, 50)
+    let cipherText = raw.slice(50)
+    if (version === 2) cipherText = (cipherText.match(/../g) || []).reverse().join('')
+    if (version !== 1 && version !== 2) throw new Error('不支持的 payload 版本: ' + version)
+    const plainText = await uni.crypto.xChaCha20Poly1305Decrypt({
+      cipherText,
+      key,
+      nonce,
+      inputEncoding: 'hex',
+      keyEncoding: 'hex',
+      nonceEncoding: 'hex',
+    })
+    try {
+      return JSON.parse(plainText)
+    } catch (_) {
+      throw new Error('分类 payload 解密成功但内容不是 JSON')
+    }
+  },
+
+  async _loadEncrypted(path, config) {
+    const errors = []
+    for (let i = 0; i < config.routes.length; i++) {
+      const url = config.routes[i] + path
+      try {
+        return await this._decryptPayload(await this._getJson(url, 10000), config.key)
+      } catch (e) {
+        errors.push(String(e && e.message || e))
+      }
+    }
+    throw new Error('分类主备线路均失败: ' + errors.join('；').slice(0, 300))
+  },
+
+  _findBookRows(value, depth = 0) {
+    if (depth > 4 || value == null) return []
+    if (Array.isArray(value)) {
+      if (value.some(item => item && typeof item === 'object'
+        && (item.id !== undefined || item.album_id !== undefined)
+        && (item.title !== undefined || item.name !== undefined))) return value
+      for (let i = 0; i < value.length; i++) {
+        const found = this._findBookRows(value[i], depth + 1)
+        if (found.length) return found
+      }
+      return []
+    }
+    if (typeof value !== 'object') return []
+    const preferred = ['list', 'items', 'albums', 'results', 'data']
+    for (let i = 0; i < preferred.length; i++) {
+      if (value[preferred[i]] === undefined) continue
+      const found = this._findBookRows(value[preferred[i]], depth + 1)
+      if (found.length) return found
+    }
+    const keys = Object.keys(value)
+    for (let i = 0; i < keys.length; i++) {
+      const found = this._findBookRows(value[keys[i]], depth + 1)
+      if (found.length) return found
+    }
+    return []
+  },
+
+  _toBooks(data, limit = 8) {
+    return this._findBookRows(data).map(item => {
+      const count = Number(item.count || item.track_count || item.trackCount || 0)
+      const author = String(item.author || '').trim()
+      const teller = String(item.teller || item.anchor || '').trim()
+      const intro = []
+      if (teller && teller !== author) intro.push('演播: ' + teller)
+      if (count > 0) intro.push(count + '集')
+      if (item.status) intro.push(String(item.status))
+      return {
+        bookId: String(item.id || item.album_id || item.albumId || ''),
+        title: String(item.title || item.name || '').trim(),
+        cover: String(item.cover_url || item.cover || item.pic || ''),
+        author: author || teller,
+        intro: intro.join(' · '),
+      }
+    }).filter(item => item.bookId && item.title).slice(0, limit)
+  },
+
+  async _loadCategory(category, config) {
+    const data = await this._loadEncrypted(
+      '/types/' + category.id + '/' + category.sort + '/p1',
+      config,
+    )
+    return this._toBooks(data, 8)
   },
 
   // ── HTML 文本清洗 ──
@@ -79,6 +218,40 @@
     }
     // 搜不到返回空 list, 不抛错
     return { list: list.slice(0, pageSize), page, maxPage: 1, hasMore: false }
+  },
+
+  async discover() {
+    const categories = [
+      { title: '热门', id: 46, sort: 'popular' },
+      { title: '玄幻奇幻', id: 46, sort: 'comprehensive' },
+      { title: '武侠小说', id: 11, sort: 'comprehensive' },
+      { title: '恐怖惊悚', id: 14, sort: 'comprehensive' },
+      { title: '历史军事', id: 15, sort: 'comprehensive' },
+      { title: '广播剧', id: 36, sort: 'comprehensive' },
+    ]
+    const config = await this._getPayloadConfig()
+    const loaded = new Array(categories.length)
+    let next = 0
+    const worker = async () => {
+      while (next < categories.length) {
+        const index = next++
+        try {
+          const list = await this._loadCategory(categories[index], config)
+          if (list.length) loaded[index] = { title: categories[index].title, list }
+        } catch (_) {
+          // 单个分区失败不影响其他分区。
+        }
+      }
+    }
+    await Promise.all([worker(), worker()])
+    const sections = loaded.filter(Boolean)
+    if (!sections.length) {
+      this._payloadConfig = null
+      const fresh = await this._getPayloadConfig(true)
+      const list = await this._loadCategory(categories[1], fresh)
+      if (list.length) sections.push({ title: categories[1].title, list })
+    }
+    return { sections }
   },
 
   // ── getChapters: bookId 即 albumId。请求任一章节页, 从 __NUXT_DATA__ 还原全量章节 ──
@@ -135,7 +308,7 @@
     }
   },
 
-  // ── getAudioUrl: chapterId = "albumId/index"。返回嗅探指令, 由 App WebView 抓时效签名直链 ──
+  // ── getAudioUrl: chapterId = "albumId/index"。返回嗅探指令, 由 App 后台 WebView 抓时效签名直链 ──
   async getAudioUrl(chapterId) {
     if (!chapterId || String(chapterId).indexOf('/') < 0) {
       throw new Error('无效的 chapterId: ' + JSON.stringify(chapterId))

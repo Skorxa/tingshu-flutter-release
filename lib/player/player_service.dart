@@ -7,6 +7,7 @@ import 'package:audio_service/audio_service.dart';
 import '../data/baidu_pan_service.dart';
 import '../data/cache_service.dart';
 import '../data/catalog_cache_service.dart';
+import '../data/cloud_auth_service.dart';
 import '../data/listening_stats_service.dart';
 import '../data/log_service.dart';
 import '../data/quark_pan_service.dart';
@@ -61,6 +62,9 @@ class PlayerService extends ChangeNotifier {
         audioOffloadMode: offloadEnabled
             ? AndroidAudioOffloadMode.enabled
             : AndroidAudioOffloadMode.disabled,
+        // 部分 Android DSP 虽然声明支持音频卸载，却不支持运行时变速。
+        // 要求变速能力可让 ExoPlayer 在这些设备上自动退回普通解码。
+        isSpeedChangeSupportRequired: true,
       ),
     );
   }
@@ -460,6 +464,7 @@ class PlayerService extends ChangeNotifier {
     bool recovery = false,
   }) async {
     if (index < 0 || index >= chapters.length) return;
+    if (!_allowPlaybackRequest()) return;
     _pendingResume = false; // 真正进入播放,清除待续播态
     _userWantsPlayback = true;
     final seq = ++_playSeq;
@@ -785,6 +790,7 @@ class PlayerService extends ChangeNotifier {
   }
 
   Future<void> play() async {
+    if (!_allowPlaybackRequest()) return;
     // 待续播态:首次点播放从上次断点加载并续播,而非空 play()
     if (_pendingResume) {
       final resumeAt = _resumePositionSeconds;
@@ -815,6 +821,19 @@ class PlayerService extends ChangeNotifier {
     _broadcast();
   }
 
+  bool _allowPlaybackRequest() {
+    if (CloudAuthService.instance.canUseApp) return true;
+    _userWantsPlayback = false;
+    _error = '设备授权不可用';
+    LogService.instance.warning(
+      'Player',
+      '已拦截未授权的播放请求',
+      detail: '授权状态: ${CloudAuthService.instance.stateLabel}',
+    );
+    _broadcast();
+    return false;
+  }
+
   Future<void> toggle() => _playing ? pause() : play();
 
   Future<void> next() async {
@@ -839,11 +858,25 @@ class PlayerService extends ChangeNotifier {
   }
 
   Future<void> setSpeed(double s) async {
-    _speed = s;
-    await _player.setSpeed(s);
-    _updateMiniControls();
-    _broadcast();
-    notifyListeners();
+    if (!s.isFinite || s <= 0) return;
+    final previous = _speed;
+    try {
+      await _player.setSpeed(s);
+      _speed = s;
+      LogService.instance.info(
+        'Player',
+        '播放倍速已生效',
+        detail:
+            '倍速: ${s.toStringAsFixed(2)}x\n音频卸载: ${_offloadEnabled ? '开启' : '关闭'}',
+      );
+    } catch (e, stack) {
+      _speed = previous;
+      LogService.instance.error('Player', '设置播放倍速失败', error: e, stack: stack);
+    } finally {
+      _updateMiniControls();
+      _broadcast();
+      notifyListeners();
+    }
   }
 
   void setSleepByChapters(int count) {

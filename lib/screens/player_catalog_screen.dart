@@ -674,54 +674,63 @@ class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
                 }
                 final currentChapterId = _currentChapterId(player);
                 final currentCatalogIndex = _currentCatalogIndex(player);
-                return NotificationListener<ScrollNotification>(
-                  onNotification: (notification) {
-                    if (notification.metrics.pixels >=
-                            notification.metrics.maxScrollExtent - 300 &&
-                        _hasMore &&
-                        !_loading &&
-                        !_loadingAll) {
-                      unawaited(_loadPage());
-                    }
-                    return false;
-                  },
-                  child: ListView.builder(
-                    controller: _scrollController,
-                    itemExtent: _chapterExtent,
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                    itemCount: _chapters.length + 1,
-                    itemBuilder: (context, index) {
-                      if (index == _chapters.length) {
-                        return Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
-                          child: Center(
-                            child: Text(
-                              _loadingAll
-                                  ? '正在分页补全目录 ${(_page - 1).clamp(0, _maxPage)}/$_maxPage'
-                                  : (_loading
-                                        ? '加载中...'
-                                        : (_hasMore ? '上拉加载更多' : '目录已加载完整')),
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: cs.onSurfaceVariant,
+                return Scrollbar(
+                  controller: _scrollController,
+                  thumbVisibility: true,
+                  trackVisibility: true,
+                  interactive: true,
+                  thickness: 8,
+                  radius: const Radius.circular(4),
+                  scrollbarOrientation: ScrollbarOrientation.right,
+                  child: NotificationListener<ScrollNotification>(
+                    onNotification: (notification) {
+                      if (notification.metrics.pixels >=
+                              notification.metrics.maxScrollExtent - 300 &&
+                          _hasMore &&
+                          !_loading &&
+                          !_loadingAll) {
+                        unawaited(_loadPage());
+                      }
+                      return false;
+                    },
+                    child: ListView.builder(
+                      controller: _scrollController,
+                      itemExtent: _chapterExtent,
+                      padding: const EdgeInsets.fromLTRB(12, 8, 24, 8),
+                      itemCount: _chapters.length + 1,
+                      itemBuilder: (context, index) {
+                        if (index == _chapters.length) {
+                          return Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
+                            child: Center(
+                              child: Text(
+                                _loadingAll
+                                    ? '正在分页补全目录 ${(_page - 1).clamp(0, _maxPage)}/$_maxPage'
+                                    : (_loading
+                                          ? '加载中...'
+                                          : (_hasMore ? '上拉加载更多' : '目录已加载完整')),
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: cs.onSurfaceVariant,
+                                ),
                               ),
                             ),
-                          ),
+                          );
+                        }
+                        final chapter = _chapters[index];
+                        final selected =
+                            chapter.chapterId == currentChapterId ||
+                            index == currentCatalogIndex;
+                        final cached = _cachedIds.contains(chapter.chapterId);
+                        return _ChapterTile(
+                          index: index,
+                          chapter: chapter,
+                          selected: selected,
+                          cached: cached,
+                          onTap: () => _play(index),
                         );
-                      }
-                      final chapter = _chapters[index];
-                      final selected =
-                          chapter.chapterId == currentChapterId ||
-                          index == currentCatalogIndex;
-                      final cached = _cachedIds.contains(chapter.chapterId);
-                      return _ChapterTile(
-                        index: index,
-                        chapter: chapter,
-                        selected: selected,
-                        cached: cached,
-                        onTap: () => _play(index),
-                      );
-                    },
+                      },
+                    ),
                   ),
                 );
               },

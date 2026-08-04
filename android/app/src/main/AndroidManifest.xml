@@ -6,6 +6,8 @@
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
 
     <application
         android:label="橘听"
@@ -38,11 +40,6 @@
             android:name=".LoginWebViewActivity"
             android:exported="false"
             android:hardwareAccelerated="true" />
-        <activity
-            android:name=".AudioSnifferActivity"
-            android:exported="false"
-            android:hardwareAccelerated="true"
-            android:theme="@style/NormalTheme" />
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -62,6 +59,7 @@
         <service
             android:name="com.ryanheise.audioservice.AudioService"
             android:foregroundServiceType="mediaPlayback"
+            android:stopWithTask="false"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.media.browse.MediaBrowserService" />

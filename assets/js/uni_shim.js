@@ -65,6 +65,24 @@ var uni = {
           ivEncoding: opts.ivEncoding || 'base64'
         }));
       });
+    },
+    xChaCha20Poly1305Decrypt: function (opts) {
+      opts = opts || {};
+      return new Promise(function (resolve, reject) {
+        var id = ++__cryptoSeq;
+        __cryptoCbs[id] = { resolve: resolve, reject: reject };
+        sendMessage('crypto', JSON.stringify({
+          id: id,
+          sourceId: __currentCallSourceId,
+          operation: 'xChaCha20Poly1305Decrypt',
+          cipherText: opts.cipherText || opts.data || '',
+          key: opts.key || '',
+          nonce: opts.nonce || '',
+          inputEncoding: opts.inputEncoding || 'base64',
+          keyEncoding: opts.keyEncoding || 'base64',
+          nonceEncoding: opts.nonceEncoding || 'base64'
+        }));
+      });
     }
   },
   getStorageSync: function (k) {

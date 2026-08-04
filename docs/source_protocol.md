@@ -154,7 +154,7 @@ const plainText = await uni.crypto.aesCbcDecrypt({
 
 音源能力由 JS 自己声明，App 不为具体站点写特殊适配逻辑。
 
-- **设置 → 音源管理 → 长按音源**：可开启/关闭、设为当前、删除。只有声明了 `login` / `loginUrl` 的源才显示“登录”；只有声明了 `configFields` 或登录配置键的源才显示“设置”。
+- **设置 → 音源管理 → 长按音源**：可开启/关闭、设为当前、删除。声明了 `login` / `loginUrl`，或声明了账号、密码、Token、Cookie 等登录配置字段的源才显示“登录”；只有声明了 `configFields` 或登录配置键的源才显示“设置”。
 - **搜索结果或书架书籍 → 长按**：可打开“调试音源”。调试会自动跑一遍搜索、目录、音频解析，并把每一步写入“设置 → 诊断 → 查看运行日志”。
 - 聚合搜索是否启用由 App 设置控制。关闭聚合搜索时，只搜索当前音源。
 
@@ -244,9 +244,18 @@ loginUrl: 'https://example.com/login'
 字段说明：
 - `key`: 必填，配置键名。音源里通过 `this.config[key]` 读取。
 - `label`: 显示名称。
-- `type`: `text`、`password`、`token`、`textarea`、`json`。
+- `type`: `text`、`password`、`token`、`textarea`、`json`、`account_list`。
 - `hint`: 输入提示。
 - `required`: 是否必填。
+
+`account_list` 会显示可动态添加、删除的账号编辑器，数量不限。保存后注入为：
+
+```js
+this.config.accounts = [
+  { email: 'user1@example.com', password: '...' },
+  { email: 'user2@example.com', password: '...' }
+]
+```
 
 音源调用时，App 会把用户填写的声明字段注入到当前源对象：
 
