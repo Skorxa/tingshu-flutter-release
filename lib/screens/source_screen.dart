@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
 
+import '../music/screens/music_settings_screen.dart' show AppRestartNotifier;
+import '../music/music_source_manager.dart';
+import '../music/music_player_service.dart';
+import '../player/player_service.dart';
 import '../data/cloud_auth_service.dart';
 import '../data/listening_stats_service.dart';
 import '../data/settings_service.dart';
+import '../source/source_manager.dart';
 import 'alist_screen.dart';
 import 'background_protection_screen.dart';
 import 'baidu_pan_screen.dart';
 import 'cache_manage_screen.dart';
 import 'cloud_auth_screen.dart';
+import 'discover_source_setting_screen.dart';
 import 'quark_pan_screen.dart';
 import 'runtime_log_screen.dart';
 import 'software_update_screen.dart';
@@ -64,6 +70,21 @@ class _SourceScreenState extends State<SourceScreen> {
     );
   }
 
+  String _discoverSubtitle(SettingsService settings) {
+    final sources = SourceManager.instance
+        .getSources()
+        .where((s) => s.enabled && s.supportsDiscover)
+        .toList();
+    if (sources.isEmpty) return '当前没有支持发现页的音源';
+    final selected = sources
+        .where((s) => settings.isDiscoverSourceSelected(s.id))
+        .length;
+    if (!settings.discoverSelectionConfigured) {
+      return '默认全部（$selected/${sources.length}）';
+    }
+    return '已选择 $selected/${sources.length} 个';
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = SettingsService.instance;
@@ -80,8 +101,26 @@ class _SourceScreenState extends State<SourceScreen> {
               ]),
               builder: (context, _) => Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const _ListeningStatsCard(),
+               children: [
+                 const _ListeningStatsCard(),
+
+                  // 双模态
+                  _buildSection(
+                    title: '双模态',
+                    icon: Icons.swap_horizontal_circle_outlined,
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.headphones),
+                        title: const Text('应用模式'),
+                        subtitle: Text(settings.appModeLabel),
+                        trailing: FilledButton.tonalIcon(
+                          icon: const Icon(Icons.music_note),
+                          label: const Text('切换到音乐'),
+                          onPressed: () => _switchToMusicMode(context),
+                        ),
+                      ),
+                    ],
+                  ),
 
                   _buildSection(
                     title: '授权',
@@ -149,6 +188,30 @@ class _SourceScreenState extends State<SourceScreen> {
                           style: TextStyle(color: cs.onSurfaceVariant),
                         ),
                         onTap: () => _chooseSearchMatchMode(settings),
+                      ),
+                    ],
+                  ),
+
+                  // 发现
+                  _buildSection(
+                    title: '发现',
+                    icon: Icons.explore_outlined,
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.travel_explore),
+                        title: const Text('发现页音源'),
+                        subtitle: Text(_discoverSubtitle(settings)),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  const DiscoverSourceSettingScreen(),
+                            ),
+                          );
+                          if (mounted) setState(() {});
+                        },
                       ),
                     ],
                   ),
@@ -381,6 +444,40 @@ class _SourceScreenState extends State<SourceScreen> {
   String _authorizationSubtitle(CloudAuthService auth) {
     final name = auth.license?.displayName.trim() ?? '';
     return name.isEmpty ? auth.stateLabel : '${auth.stateLabel} · $name';
+  }
+}
+
+extension on _SourceScreenState {
+  Future<void> _switchToMusicMode(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('切换到音乐模式'),
+        content: const Text('应用将重启以切换到音乐模式。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('切换'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await PlayerService.instance.pause();
+    await SettingsService.instance.setAppMode('music');
+    // 运行时切换:初始化音乐服务
+    await MusicSourceManager.instance.ensureInitialized();
+    // AudioService 在 main() 中已初始化(听书 handler)。
+    // 运行时切换时无法重新 init,音乐播放器仍可前台播放,
+    // 后台通知仅在冷启动音乐模式时可用。
+    if (!MusicPlayerService.instance.hasHandler) {
+      MusicPlayerService.instance.attachHandlerWithoutService();
+    }
+    AppRestartNotifier.instance.notify();
   }
 }
 

@@ -39,6 +39,9 @@ class SettingsService extends ChangeNotifier {
   static const _kDynamicColor = 'settings_dynamic_color';
   static const _kSearchMatchMode = 'settings_search_match_mode';
   static const _kUpdateManifestUrl = 'settings_update_manifest_url';
+  static const _kDiscoverSourceIds = 'settings_discover_source_ids';
+ static const _kDiscoverSelectionConfigured =
+     'settings_discover_selection_configured';
 
   bool _darkMode = false;
   bool _androidAudioOffload = false;
@@ -51,7 +54,10 @@ class SettingsService extends ChangeNotifier {
   int _cleanupLimit = 100;
   int _cacheSpaceLimit = 0; // 0 表示不限制，单位 MB
   String _updateManifestUrl = '';
-  bool _ready = false;
+ List<String> _discoverSourceIds = [];
+ bool _discoverSelectionConfigured = false;
+ int _discoverRevision = 0;
+ bool _ready = false;
 
   bool get darkMode => _darkMode;
   bool get androidAudioOffload => _androidAudioOffload;
@@ -64,7 +70,22 @@ class SettingsService extends ChangeNotifier {
   int get cleanupLimit => _cleanupLimit;
   int get cacheSpaceLimit => _cacheSpaceLimit;
   String get updateManifestUrl => _updateManifestUrl;
-  bool get ready => _ready;
+  List<String> get discoverSourceIds => List.unmodifiable(_discoverSourceIds);
+ bool get discoverSelectionConfigured => _discoverSelectionConfigured;
+ int get discoverRevision => _discoverRevision;
+ bool get ready => _ready;
+
+  // ── 双模态:应用模式(tingshu / music) ──
+  static const _kAppMode = 'settings_app_mode';
+  String _appMode = 'tingshu';
+  String get appMode => _appMode;
+  bool get isMusicMode => _appMode == 'music';
+  String get appModeLabel => _appMode == 'music' ? '音乐模式' : '听书模式';
+
+  bool isDiscoverSourceSelected(String sourceId) {
+    return !_discoverSelectionConfigured ||
+        _discoverSourceIds.contains(sourceId);
+  }
 
   int get cacheFrequencyMinutes => _cacheFrequency == 'fast' ? 3 : 1;
 
@@ -113,7 +134,13 @@ class SettingsService extends ChangeNotifier {
       0,
     );
     _updateManifestUrl = prefs.getString(_kUpdateManifestUrl) ?? '';
-    _ready = true;
+    _discoverSourceIds = (prefs.getStringList(_kDiscoverSourceIds) ?? const [])
+        .where((id) => id.trim().isNotEmpty)
+        .toList();
+   _discoverSelectionConfigured =
+       prefs.getBool(_kDiscoverSelectionConfigured) ?? false;
+    _appMode = prefs.getString(_kAppMode) ?? 'tingshu';
+   _ready = true;
   }
 
   int _validInt(int? value, List<int> options, int fallback) {
@@ -200,5 +227,29 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kUpdateManifestUrl, _updateManifestUrl);
+  }
+
+ Future<void> setDiscoverSourceIds(List<String> ids) async {
+    final next = <String>[];
+    final seen = <String>{};
+    for (final id in ids) {
+      final value = id.trim();
+      if (value.isNotEmpty && seen.add(value)) next.add(value);
+    }
+    _discoverSourceIds = next;
+    _discoverSelectionConfigured = true;
+    _discoverRevision++;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_kDiscoverSourceIds, _discoverSourceIds);
+    await prefs.setBool(_kDiscoverSelectionConfigured, true);
+  }
+
+  Future<void> setAppMode(String mode) async {
+    if (mode != 'tingshu' && mode != 'music') return;
+    _appMode = mode;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kAppMode, mode);
   }
 }

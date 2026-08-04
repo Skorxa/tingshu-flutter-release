@@ -5,9 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../data/log_service.dart';
+import '../data/settings_service.dart';
 import '../source/models.dart';
 import '../source/source_debug_runner.dart';
 import '../source/source_manager.dart';
+import 'discover_source_setting_screen.dart';
 import 'runtime_log_screen.dart';
 import 'subscription_manage_screen.dart';
 import 'source_config_screen.dart';
@@ -202,6 +204,24 @@ class _SourceManageScreenState extends State<SourceManageScreen> {
     _refresh();
   }
 
+  Future<void> _toggleDiscover(SourceMeta source) async {
+    final settings = SettingsService.instance;
+    final supportedIds = _sources
+        .where((s) => s.supportsDiscover)
+        .map((s) => s.id)
+        .toList();
+    final current = settings.discoverSelectionConfigured
+        ? List<String>.from(settings.discoverSourceIds)
+        : List<String>.from(supportedIds);
+    if (current.contains(source.id)) {
+      current.remove(source.id);
+    } else {
+      current.add(source.id);
+    }
+    await settings.setDiscoverSourceIds(current);
+    if (mounted) setState(() {});
+  }
+
   Future<void> _openConfig(SourceMeta source) async {
     await Navigator.push(
       context,
@@ -261,6 +281,7 @@ class _SourceManageScreenState extends State<SourceManageScreen> {
   }
 
   Future<void> _showSourceMenu(SourceMeta source) async {
+    final settings = SettingsService.instance;
     final hasLogin = SourceManager.instance.sourceHasLoginConfig(source.id);
     final hasSettings = SourceManager.instance.sourceHasSettingConfig(
       source.id,
@@ -294,6 +315,21 @@ class _SourceManageScreenState extends State<SourceManageScreen> {
                   title: const Text('设置'),
                   subtitle: const Text('修改这个音源声明的配置项'),
                   onTap: () => Navigator.pop(ctx, 'settings'),
+                ),
+              if (source.supportsDiscover)
+                ListTile(
+                  leading: Icon(
+                    settings.isDiscoverSourceSelected(source.id)
+                        ? Icons.explore
+                        : Icons.explore_outlined,
+                  ),
+                  title: Text(
+                    settings.isDiscoverSourceSelected(source.id)
+                        ? '移出发现页'
+                        : '加入发现页',
+                  ),
+                  subtitle: const Text('控制是否显示在首页发现页'),
+                  onTap: () => Navigator.pop(ctx, 'discover'),
                 ),
               ListTile(
                 leading: Icon(
@@ -331,6 +367,10 @@ class _SourceManageScreenState extends State<SourceManageScreen> {
     }
     if (action == 'settings') {
       await _openConfig(source);
+      return;
+    }
+    if (action == 'discover') {
+      await _toggleDiscover(source);
       return;
     }
     if (action == 'toggle') {
@@ -529,6 +569,27 @@ class _SourceManageScreenState extends State<SourceManageScreen> {
             ),
           ),
           Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _loading
+                    ? null
+                    : () async {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const DiscoverSourceSettingScreen(),
+                          ),
+                        );
+                        _refresh();
+                      },
+                icon: const Icon(Icons.explore_outlined),
+                label: const Text('发现页设置'),
+              ),
+            ),
+          ),
+          Padding(
             padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
             child: Text(
               '推荐在订阅源管理里维护远端订阅;本地导入会调起系统文件管理器选择 .js 音源文件,也可用右上角粘贴文本导入。',
@@ -568,6 +629,8 @@ class _SourceManageScreenState extends State<SourceManageScreen> {
                     ),
                     itemBuilder: (context, index) {
                       final s = _sources[index];
+                      final discoverSelected = SettingsService.instance
+                          .isDiscoverSourceSelected(s.id);
                       return Card(
                         key: ValueKey(s.id),
                         margin: const EdgeInsets.only(bottom: 12),
@@ -631,6 +694,28 @@ class _SourceManageScreenState extends State<SourceManageScreen> {
                                       ),
                                     ),
                                   ),
+                                if (s.supportsDiscover)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: discoverSelected
+                                          ? cs.primaryContainer
+                                          : cs.surfaceContainerHighest,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      discoverSelected ? '发现页' : '未选发现页',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: discoverSelected
+                                            ? cs.onPrimaryContainer
+                                            : cs.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ),
                                 Container(
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 6,
@@ -665,6 +750,19 @@ class _SourceManageScreenState extends State<SourceManageScreen> {
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
+                              if (s.supportsDiscover)
+                                IconButton(
+                                  icon: Icon(
+                                    discoverSelected
+                                        ? Icons.explore
+                                        : Icons.explore_outlined,
+                                    color: discoverSelected
+                                        ? cs.primary
+                                        : cs.onSurfaceVariant,
+                                  ),
+                                  tooltip: discoverSelected ? '移出发现页' : '加入发现页',
+                                  onPressed: () => _toggleDiscover(s),
+                                ),
                               Switch(
                                 value: s.enabled,
                                 onChanged: (v) async {

@@ -79,11 +79,20 @@
           <section id="invitesView" class="view-section" hidden>
             <div class="section-heading">
               <div><h2>邀请码</h2><p>创建和撤销设备激活邀请码。</p></div>
-              <button id="openInviteDialog" class="primary" type="button">新建邀请码</button>
+              <div class="filters">
+                <input id="inviteSearch" type="search" placeholder="搜索用途/ID/激活码" aria-label="搜索邀请码">
+                <select id="inviteStatus" aria-label="邀请码状态">
+                  <option value="">全部状态</option>
+                  <option value="active">正常</option>
+                  <option value="revoked">已撤销</option>
+                </select>
+                <button id="searchInvites" type="button">查询</button>
+                <button id="openInviteDialog" class="primary" type="button">新建邀请码</button>
+              </div>
             </div>
             <div class="table-wrap">
               <table>
-                <thead><tr><th>用途</th><th>状态</th><th>使用次数</th><th>授权期限</th><th>邀请码到期</th><th class="actions-col">操作</th></tr></thead>
+                <thead><tr><th>用途</th><th>激活码</th><th>状态</th><th>使用次数</th><th>授权期限</th><th>邀请码到期</th><th>创建时间</th><th class="actions-col">操作</th></tr></thead>
                 <tbody id="invitesBody"></tbody>
               </table>
             </div>
@@ -165,6 +174,26 @@
     <dialog id="inviteResultDialog">
       <div class="dialog-heading"><h2>邀请码已创建</h2><button id="closeInviteResult" class="close-button" aria-label="关闭" type="button">×</button></div>
       <div class="invite-code-row"><code id="createdInviteCode"></code><button id="copyInviteCode" type="button">复制</button></div>
+    </dialog>
+
+    <dialog id="inviteDetailDialog">
+      <div class="dialog-heading"><h2>邀请码详情</h2><button class="close-button" data-close="inviteDetailDialog" aria-label="关闭" type="button">×</button></div>
+      <div id="inviteDetailBody"></div>
+    </dialog>
+
+    <dialog id="inviteEditDialog">
+      <form id="inviteEditForm" method="dialog">
+        <div class="dialog-heading"><h2>编辑邀请码</h2><button class="close-button" value="cancel" aria-label="关闭" type="submit">×</button></div>
+        <input id="editInviteId" type="hidden">
+        <div class="form-grid">
+          <label>用途名称<input id="editInviteLabel" maxlength="80" required></label>
+          <label>最多使用次数<input id="editInviteMaxUses" type="number" min="1" max="100" required></label>
+          <label>每用户设备上限<input id="editInviteMaxDevices" type="number" min="1" max="20" required></label>
+          <label>授权有效天数<input id="editInviteAuthDays" type="number" min="0" max="3650" required></label>
+          <label class="full">邀请码有效天数（0=永久，从现在起算）<input id="editInviteExpiresDays" type="number" min="0" max="365" required></label>
+        </div>
+        <div class="dialog-actions"><button value="cancel" type="submit">取消</button><button id="saveInvite" class="primary" value="default" type="submit">保存</button></div>
+      </form>
     </dialog>
 
     <dialog id="userDialog">

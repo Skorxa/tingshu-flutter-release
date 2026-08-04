@@ -21,6 +21,12 @@ import 'screens/shelf_screen.dart';
 import 'screens/source_screen.dart';
 import 'widgets/mini_player.dart';
 
+import 'music/music_source_manager.dart';
+import 'music/music_player_service.dart';
+import 'music/music_audio_handler.dart';
+import 'music/screens/music_home_shell.dart';
+import 'music/screens/music_settings_screen.dart' show AppRestartNotifier;
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   FlutterError.onError = (details) {
@@ -109,6 +115,25 @@ Future<void> main() async {
   } catch (e, stack) {
     LogService.instance.error('Alist', '配置加载失败', error: e, stack: stack);
   }
+
+  // 根据应用模式初始化对应的服务
+  if (SettingsService.instance.isMusicMode) {
+    await MusicSourceManager.instance.init();
+    final musicHandler = await AudioService.init(
+      builder: () => MusicAudioHandler(),
+      config: const AudioServiceConfig(
+        androidNotificationChannelId: 'com.tingshu.audio',
+        androidNotificationChannelName: '橘听',
+        androidNotificationChannelDescription: '音乐播放控制与后台播放',
+        androidNotificationOngoing: true,
+        androidStopForegroundOnPause: true,
+        artDownscaleWidth: 512,
+        artDownscaleHeight: 512,
+      ),
+    );
+    MusicPlayerService.instance.attachHandler(musicHandler);
+  }
+
   ThemeService.instance; // 触发构造:启动封面取色监听
   runApp(const TingshuApp());
 }
@@ -122,6 +147,7 @@ class TingshuApp extends StatelessWidget {
       animation: Listenable.merge([
         SettingsService.instance,
         ThemeService.instance,
+        AppRestartNotifier.instance,
       ]),
       builder: (context, _) => MaterialApp(
         title: '橘听',
@@ -137,7 +163,9 @@ class TingshuApp extends StatelessWidget {
         themeMode: SettingsService.instance.darkMode
             ? ThemeMode.dark
             : ThemeMode.light,
-        home: const CloudAuthGate(child: HomeShell()),
+        home: SettingsService.instance.isMusicMode
+            ? const MusicHomeShell()
+            : const CloudAuthGate(child: HomeShell()),
       ),
     );
   }

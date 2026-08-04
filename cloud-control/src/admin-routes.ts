@@ -102,7 +102,7 @@ async function setUserStatus(
   const { value } = await readJson<Record<string, unknown>>(request)
   const status = cleanText(value.status, 20)
   if (!['active', 'disabled'].includes(status)) {
-    throw new HttpError(400, 'invalid_user_status', '用户状态无效')
+    throw new HttpError(400, 'invalid_user_status', 'user status invalid')
   }
   const result = await env.DB.prepare(
     'UPDATE users SET status = ?, updated_at = ? WHERE id = ?',
@@ -110,7 +110,7 @@ async function setUserStatus(
     .bind(status, nowSeconds(), userId)
     .run()
   if ((result.meta.changes || 0) !== 1) {
-    throw new HttpError(404, 'user_not_found', '用户不存在')
+    throw new HttpError(404, 'user_not_found', 'user not found')
   }
   await audit(env, 'admin', admin.id, `user.${status}`, 'user', userId)
   return json({ ok: true })
@@ -128,7 +128,7 @@ async function updateUser(
   )
     .bind(userId)
     .first<{ display_name: string; expires_at: number | null; max_devices: number }>()
-  if (!current) throw new HttpError(404, 'user_not_found', '用户不存在')
+  if (!current) throw new HttpError(404, 'user_not_found', 'user not found')
   const displayName = cleanText(value.displayName, 50) || current.display_name
   const maxDevices = boundedInt(value.maxDevices, current.max_devices, 1, 20)
   let expiresAt = current.expires_at
@@ -175,7 +175,7 @@ async function setDeviceStatus(
   const { value } = await readJson<Record<string, unknown>>(request)
   const status = cleanText(value.status, 20)
   if (!['active', 'disabled'].includes(status)) {
-    throw new HttpError(400, 'invalid_device_status', '设备状态无效')
+    throw new HttpError(400, 'invalid_device_status', 'device status invalid')
   }
   const result = await env.DB.prepare(
     'UPDATE devices SET status = ? WHERE id = ?',
@@ -183,7 +183,7 @@ async function setDeviceStatus(
     .bind(status, deviceId)
     .run()
   if ((result.meta.changes || 0) !== 1) {
-    throw new HttpError(404, 'device_not_found', '设备不存在')
+    throw new HttpError(404, 'device_not_found', 'device not found')
   }
   if (status === 'disabled') {
     await env.DB.prepare(
@@ -196,16 +196,25 @@ async function setDeviceStatus(
   return json({ ok: true })
 }
 
-async function listInvites(env: Env): Promise<Response> {
+async function listInvites(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url)
+  const search = cleanText(url.searchParams.get('q'), 80)
+  const status = cleanText(url.searchParams.get('status'), 20)
+  const like = `%${search}%`
   const result = await env.DB.prepare(
     `SELECT
-       i.id, i.label, i.status, i.expires_at, i.max_uses, i.used_count,
+       i.id, i.code, i.label, i.status, i.expires_at, i.max_uses, i.used_count,
        i.max_devices, i.authorization_days, i.user_id, i.created_at,
+       i.created_by, i.updated_at,
        u.display_name AS user_name
      FROM invites i
      LEFT JOIN users u ON u.id = i.user_id
+     WHERE (? = '' OR i.label LIKE ? OR i.id LIKE ? OR i.code LIKE ?)
+       AND (? = '' OR i.status = ?)
      ORDER BY i.created_at DESC LIMIT 200`,
-  ).all()
+  )
+    .bind(search, like, like, like, status, status)
+    .all()
   return json({ ok: true, data: result.results || [] })
 }
 
@@ -227,18 +236,19 @@ async function createInvite(
     const exists = await env.DB.prepare('SELECT id FROM users WHERE id = ?')
       .bind(userId)
       .first()
-    if (!exists) throw new HttpError(404, 'user_not_found', '绑定用户不存在')
+    if (!exists) throw new HttpError(404, 'user_not_found', 'user not found')
   }
   await env.DB.prepare(
     `INSERT INTO invites(
-      id, code_hash, label, status, expires_at, max_uses, used_count,
+      id, code_hash, code, label, status, expires_at, max_uses, used_count,
       max_devices, authorization_days, user_id, created_at, updated_at, created_by
-    ) VALUES (?, ?, ?, 'active', ?, ?, 0, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, 'active', ?, ?, 0, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       id,
       await sha256Hex(normalizeInviteCode(code)),
-      cleanText(value.label, 80) || '新用户',
+      code,
+      cleanText(value.label, 80) || 'New user',
       expiresDays > 0 ? now + expiresDays * 24 * 60 * 60 : null,
       maxUses,
       maxDevices,
@@ -269,9 +279,87 @@ async function revokeInvite(
     .bind(nowSeconds(), inviteId)
     .run()
   if ((result.meta.changes || 0) !== 1) {
-    throw new HttpError(404, 'invite_not_found', '邀请码不存在')
+    throw new HttpError(404, 'invite_not_found', 'invite not found')
   }
   await audit(env, 'admin', admin.id, 'invite.revoke', 'invite', inviteId)
+  return json({ ok: true })
+}
+
+async function inviteDetail(env: Env, inviteId: string): Promise<Response> {
+  const invite = await env.DB.prepare(
+    `SELECT
+       i.id, i.code, i.label, i.status, i.expires_at, i.max_uses, i.used_count,
+       i.max_devices, i.authorization_days, i.user_id, i.created_at,
+       i.created_by, i.updated_at,
+       u.display_name AS user_name
+     FROM invites i
+     LEFT JOIN users u ON u.id = i.user_id
+     WHERE i.id = ?`,
+  )
+    .bind(inviteId)
+    .first()
+  if (!invite) throw new HttpError(404, 'invite_not_found', 'invite not found')
+  const devices = await env.DB.prepare(
+    `SELECT d.id, d.name, d.platform, d.app_version, d.status, d.created_at, d.last_seen_at
+     FROM devices d WHERE d.activation_invite_id = ? ORDER BY d.created_at DESC`,
+  )
+    .bind(inviteId)
+    .all()
+  return json({ ok: true, data: { ...invite, devices: devices.results || [] } })
+}
+
+async function updateInvite(
+  request: Request,
+  env: Env,
+  admin: AdminIdentity,
+  inviteId: string,
+): Promise<Response> {
+  const { value } = await readJson<Record<string, unknown>>(request)
+  const current = await env.DB.prepare(
+    'SELECT label, max_uses, max_devices, authorization_days, expires_at FROM invites WHERE id = ?',
+  )
+    .bind(inviteId)
+    .first<{ label: string; max_uses: number; max_devices: number; authorization_days: number; expires_at: number | null }>()
+  if (!current) throw new HttpError(404, 'invite_not_found', 'invite not found')
+  const label = cleanText(value.label, 80) || current.label
+  const maxUses = boundedInt(value.maxUses, current.max_uses, 1, 100)
+  const maxDevices = boundedInt(value.maxDevices, current.max_devices, 1, 20)
+  const authorizationDays = boundedInt(value.authorizationDays, current.authorization_days, 0, 3650)
+  let expiresAt = current.expires_at
+  if (Object.prototype.hasOwnProperty.call(value, 'expiresAt')) {
+    const parsed = Number(value.expiresAt)
+    expiresAt = Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : null
+  }
+  if (Object.prototype.hasOwnProperty.call(value, 'expiresDays')) {
+    const days = Number(value.expiresDays)
+    expiresAt = Number.isFinite(days) && days > 0
+      ? nowSeconds() + Math.floor(days) * 24 * 60 * 60
+      : null
+  }
+  await env.DB.prepare(
+    `UPDATE invites SET label = ?, max_uses = ?, max_devices = ?, authorization_days = ?, expires_at = ?, updated_at = ?
+     WHERE id = ?`,
+  )
+    .bind(label, maxUses, maxDevices, authorizationDays, expiresAt, nowSeconds(), inviteId)
+    .run()
+  await audit(env, 'admin', admin.id, 'invite.update', 'invite', inviteId, {
+    label, maxUses, maxDevices, authorizationDays, expiresAt,
+  })
+  return json({ ok: true })
+}
+
+async function deleteInvite(
+  env: Env,
+  admin: AdminIdentity,
+  inviteId: string,
+): Promise<Response> {
+  const result = await env.DB.prepare('DELETE FROM invites WHERE id = ?')
+    .bind(inviteId)
+    .run()
+  if ((result.meta.changes || 0) !== 1) {
+    throw new HttpError(404, 'invite_not_found', 'invite not found')
+  }
+  await audit(env, 'admin', admin.id, 'invite.delete', 'invite', inviteId)
   return json({ ok: true })
 }
 
@@ -292,7 +380,7 @@ async function saveConfig(
   const config = validateAppConfig(value.value ?? value)
   const encoded = JSON.stringify(config)
   if (encoded.length > 64 * 1024) {
-    throw new HttpError(413, 'cloud_config_too_large', '云控配置过大')
+    throw new HttpError(413, 'cloud_config_too_large', 'cloud config too large')
   }
   const now = nowSeconds()
   await env.DB.prepare(
@@ -350,7 +438,7 @@ export async function handleAdminRequest(request: Request, env: Env): Promise<Re
     return listUsers(request, env)
   }
   if (request.method === 'GET' && path === '/admin/api/invites') {
-    return listInvites(env)
+    return listInvites(request, env)
   }
   if (request.method === 'POST' && path === '/admin/api/invites') {
     return createInvite(request, env, admin)
@@ -391,9 +479,20 @@ export async function handleAdminRequest(request: Request, env: Env): Promise<Re
   if (request.method === 'POST' && match) {
     return revokeInvite(env, admin, match[1])
   }
+  match = /^\/admin\/api\/invites\/([^/]+)$/.exec(path)
+  if (request.method === 'GET' && match) {
+    return inviteDetail(env, match[1])
+  }
+  if (request.method === 'PUT' && match) {
+    return updateInvite(request, env, admin, match[1])
+  }
+  if (request.method === 'DELETE' && match) {
+    return deleteInvite(env, admin, match[1])
+  }
   match = /^\/admin\/api\/sources\/([^/]+)$/.exec(path)
   if (request.method === 'DELETE' && match) {
     return deleteSource(request, env, admin, match[1])
   }
-  throw new HttpError(404, 'admin_route_not_found', '管理接口不存在')
+  throw new HttpError(404, 'admin_route_not_found', 'admin route not found')
 }
+

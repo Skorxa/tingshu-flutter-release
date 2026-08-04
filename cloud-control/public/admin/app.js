@@ -136,7 +136,11 @@ async function loadUsers() {
 }
 
 async function loadInvites() {
-  const rows = await api('/admin/api/invites')
+  const query = new URLSearchParams({
+    q: $('#inviteSearch').value.trim(),
+    status: $('#inviteStatus').value,
+  })
+  const rows = await api(`/admin/api/invites?${query}`)
   const now = Math.floor(Date.now() / 1000)
   $('#invitesBody').innerHTML = rows.map((row) => {
     let status = row.status
@@ -145,11 +149,18 @@ async function loadInvites() {
     return `
       <tr>
         <td><strong>${escapeHtml(row.label)}</strong>${row.user_name ? `<br><span class="muted">${escapeHtml(row.user_name)}</span>` : ''}</td>
+        <td><code class="invite-code-cell">${escapeHtml(row.code || '-')}</code></td>
         <td>${badge(status)}</td>
         <td>${Number(row.used_count)} / ${Number(row.max_uses)}</td>
         <td>${Number(row.authorization_days) === 0 ? '永久' : `${Number(row.authorization_days)} 天`}</td>
         <td>${escapeHtml(formatTime(row.expires_at))}</td>
-        <td class="actions"><button class="danger" data-action="revoke-invite" data-id="${escapeHtml(row.id)}" ${row.status !== 'active' ? 'disabled' : ''}>撤销</button></td>
+        <td>${escapeHtml(formatTime(row.created_at))}</td>
+        <td class="actions">
+          <button data-action="detail-invite" data-id="${escapeHtml(row.id)}">详情</button>
+          <button data-action="edit-invite" data-id="${escapeHtml(row.id)}">编辑</button>
+          <button class="danger" data-action="revoke-invite" data-id="${escapeHtml(row.id)}" ${row.status !== 'active' ? 'disabled' : ''}>撤销</button>
+          <button class="danger" data-action="delete-invite" data-id="${escapeHtml(row.id)}">删除</button>
+        </td>
       </tr>
     `
   }).join('')
@@ -338,12 +349,25 @@ $('#inviteForm').addEventListener('submit', async (event) => {
 })
 
 $('#invitesBody').addEventListener('click', async (event) => {
-  const button = event.target.closest('button[data-action="revoke-invite"]')
-  if (!button || !confirm('确定撤销这个邀请码？')) return
+  const button = event.target.closest('button[data-action]')
+  if (!button) return
+  const action = button.dataset.action
+  const id = button.dataset.id
   try {
-    await api(`/admin/api/invites/${encodeURIComponent(button.dataset.id)}/revoke`, { method: 'POST', body: '{}' })
-    toast('邀请码已撤销')
-    await Promise.all([loadInvites(), loadSummary()])
+    if (action === 'detail-invite') return await openInviteDetail(id)
+    if (action === 'edit-invite') return await openInviteEdit(id)
+    if (action === 'revoke-invite') {
+      if (!confirm('确定撤销这个邀请码？')) return
+      await api(`/admin/api/invites/${encodeURIComponent(id)}/revoke`, { method: 'POST', body: '{}' })
+      toast('邀请码已撤销')
+      await Promise.all([loadInvites(), loadSummary()])
+    }
+    if (action === 'delete-invite') {
+      if (!confirm('确定永久删除这个邀请码？此操作不可恢复。')) return
+      await api(`/admin/api/invites/${encodeURIComponent(id)}`, { method: 'DELETE' })
+      toast('邀请码已删除')
+      await Promise.all([loadInvites(), loadSummary()])
+    }
   } catch (error) { toast(error.message) }
 })
 
@@ -351,6 +375,80 @@ $('#closeInviteResult').addEventListener('click', () => $('#inviteResultDialog')
 $('#copyInviteCode').addEventListener('click', async () => {
   await navigator.clipboard.writeText($('#createdInviteCode').textContent)
   toast('邀请码已复制')
+})
+
+$('#searchInvites').addEventListener('click', () => loadInvites().catch((error) => toast(error.message)))
+$('#inviteSearch').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') loadInvites().catch((error) => toast(error.message))
+})
+
+async function openInviteDetail(id) {
+  const data = await api(`/admin/api/invites/${encodeURIComponent(id)}`)
+  const devices = Array.isArray(data.devices) ? data.devices : []
+  $('#inviteDetailBody').innerHTML = `
+    <div class="detail-grid">
+      <div><span class="muted">激活码</span><code class="invite-code-cell">${escapeHtml(data.code || '-')}</code></div>
+      <div><span class="muted">用途</span><strong>${escapeHtml(data.label)}</strong></div>
+      <div><span class="muted">状态</span>${badge(data.status)}</div>
+      <div><span class="muted">使用次数</span>${Number(data.used_count)} / ${Number(data.max_uses)}</div>
+      <div><span class="muted">授权期限</span>${Number(data.authorization_days) === 0 ? '永久' : `${Number(data.authorization_days)} 天`}</div>
+      <div><span class="muted">设备上限</span>${Number(data.max_devices)}</div>
+      <div><span class="muted">邀请码到期</span>${escapeHtml(formatTime(data.expires_at))}</div>
+      <div><span class="muted">创建时间</span>${escapeHtml(formatTime(data.created_at))}</div>
+      <div><span class="muted">创建者</span>${escapeHtml(data.created_by || '-')}</div>
+      ${data.user_name ? `<div><span class="muted">绑定用户</span>${escapeHtml(data.user_name)}</div>` : ''}
+    </div>
+    <h3>已激活设备（${devices.length}）</h3>
+    <div class="device-list">
+      ${devices.length ? devices.map((d) => `
+        <div class="device-row">
+          <div><strong>${escapeHtml(d.name)}</strong><span>${escapeHtml(d.app_version || d.platform)} · ${escapeHtml(formatTime(d.last_seen_at))}</span></div>
+          ${badge(d.status)}
+        </div>
+      `).join('') : '<p class="empty">暂无设备使用此邀请码</p>'}
+    </div>
+  `
+  if (!$('#inviteDetailDialog').open) $('#inviteDetailDialog').showModal()
+}
+
+async function openInviteEdit(id) {
+  const data = await api(`/admin/api/invites/${encodeURIComponent(id)}`)
+  $('#editInviteId').value = id
+  $('#editInviteLabel').value = data.label || ''
+  $('#editInviteMaxUses').value = data.max_uses ?? 1
+  $('#editInviteMaxDevices').value = data.max_devices ?? 1
+  $('#editInviteAuthDays').value = data.authorization_days ?? 365
+  const now = Math.floor(Date.now() / 1000)
+  const remaining = data.expires_at ? Math.max(0, Math.ceil((Number(data.expires_at) - now) / 86400)) : 0
+  $('#editInviteExpiresDays').value = remaining
+  if (!$('#inviteEditDialog').open) $('#inviteEditDialog').showModal()
+}
+
+document.querySelectorAll('[data-close]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const dialog = document.getElementById(btn.dataset.close)
+    if (dialog?.open) dialog.close()
+  })
+})
+
+$('#inviteEditForm').addEventListener('submit', async (event) => {
+  if (event.submitter?.value === 'cancel') return
+  event.preventDefault()
+  const body = {
+    label: $('#editInviteLabel').value.trim(),
+    maxUses: Number($('#editInviteMaxUses').value),
+    maxDevices: Number($('#editInviteMaxDevices').value),
+    authorizationDays: Number($('#editInviteAuthDays').value),
+    expiresDays: Number($('#editInviteExpiresDays').value),
+  }
+  try {
+    await api(`/admin/api/invites/${encodeURIComponent($('#editInviteId').value)}`, {
+      method: 'PUT', body: JSON.stringify(body),
+    })
+    $('#inviteEditDialog').close()
+    toast('邀请码已更新')
+    await loadInvites()
+  } catch (error) { toast(error.message) }
 })
 
 $('#refreshSources').addEventListener('click', () => loadSources().catch((error) => toast(error.message)))

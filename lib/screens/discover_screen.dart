@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/log_service.dart';
+import '../data/settings_service.dart';
 import '../source/models.dart';
 import '../source/source_manager.dart';
 import '../widgets/cover_image.dart';
@@ -25,17 +26,39 @@ class _DiscoverSourceState {
 class _DiscoverScreenState extends State<DiscoverScreen> {
   final Map<String, _DiscoverSourceState> _states = {};
   bool _firstLoading = true;
+  int _lastDiscoverRevision = SettingsService.instance.discoverRevision;
 
   @override
   void initState() {
     super.initState();
+    SettingsService.instance.addListener(_onSettingsChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) => _reload());
   }
 
+  @override
+  void dispose() {
+    SettingsService.instance.removeListener(_onSettingsChanged);
+    super.dispose();
+  }
+
+  void _onSettingsChanged() {
+    if (!mounted) return;
+    final revision = SettingsService.instance.discoverRevision;
+    if (revision == _lastDiscoverRevision) return;
+    _lastDiscoverRevision = revision;
+    _reload();
+  }
+
   Future<void> _reload() async {
+    final settings = SettingsService.instance;
     final sources = SourceManager.instance
         .getSources()
-        .where((s) => s.enabled && s.supportsDiscover)
+        .where(
+          (s) =>
+              s.enabled &&
+              s.supportsDiscover &&
+              settings.isDiscoverSourceSelected(s.id),
+        )
         .toList();
 
     final Map<String, _DiscoverSourceState> next = {
@@ -114,10 +137,20 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final settings = SettingsService.instance;
     final states = _states.values.toList();
     final enabledSources = SourceManager.instance
         .getSources()
         .where((s) => s.enabled)
+        .length;
+    final selectedEnabledCount = SourceManager.instance
+        .getSources()
+        .where(
+          (s) =>
+              s.enabled &&
+              s.supportsDiscover &&
+              settings.isDiscoverSourceSelected(s.id),
+        )
         .length;
 
     return Scaffold(
@@ -156,6 +189,12 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                     icon: Icons.explore_off_outlined,
                     text: enabledSources == 0
                         ? '还没有可用的音源\n去设置页添加或开启音源吧'
+                        : (settings.discoverSelectionConfigured &&
+                              settings.discoverSourceIds.isEmpty)
+                        ? '没有选择发现页音源\n去设置页选择吧'
+                        : (selectedEnabledCount == 0 &&
+                              settings.discoverSelectionConfigured)
+                        ? '已选择的发现页音源未开启\n开启后回到这里刷新'
                         : '当前音源都不支持发现页\n需要音源实现 discover 方法',
                   ),
                 )
@@ -234,19 +273,16 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       );
     }
     return SliverList(
-      delegate: SliverChildBuilderDelegate(
-        (context, i) {
-          if (i >= sections.length) return null;
-          return _sectionCard(
-            cs: cs,
-            title: sections[i].title.isEmpty
-                ? st.source.name
-                : '${st.source.name} · ${sections[i].title}',
-            child: _bookRow(cs, st.source, sections[i].list),
-          );
-        },
-        childCount: sections.length,
-      ),
+      delegate: SliverChildBuilderDelegate((context, i) {
+        if (i >= sections.length) return null;
+        return _sectionCard(
+          cs: cs,
+          title: sections[i].title.isEmpty
+              ? st.source.name
+              : '${st.source.name} · ${sections[i].title}',
+          child: _bookRow(cs, st.source, sections[i].list),
+        );
+      }, childCount: sections.length),
     );
   }
 
@@ -341,7 +377,11 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     );
   }
 
-  Widget _coverFallback(ColorScheme cs, {double width = 104, double height = 132}) {
+  Widget _coverFallback(
+    ColorScheme cs, {
+    double width = 104,
+    double height = 132,
+  }) {
     return Container(
       width: width,
       height: height,
