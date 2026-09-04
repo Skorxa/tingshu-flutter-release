@@ -8,6 +8,7 @@ export interface Env {
   ADMIN_SESSION_SECRET?: string
   ACCESS_TOKEN_TTL_SECONDS?: string
   REFRESH_TOKEN_TTL_SECONDS?: string
+  REFRESH_GRACE_SECONDS?: string
   ADMIN_SESSION_TTL_SECONDS?: string
   OFFLINE_GRACE_SECONDS?: string
   CONFIG_OBJECT_KEY?: string

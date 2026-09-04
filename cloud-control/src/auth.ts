@@ -113,13 +113,18 @@ export async function authenticateRefresh(
     throw new HttpError(401, 'refresh_token_required', '刷新凭据为空')
   }
   const hash = await sha256Hex(refreshToken)
+  const now = nowSeconds()
+  // 匹配当前 refresh_hash,或宽限窗口内的上一代 hash。
+  // 宽限窗口覆盖“服务端已轮换、但轮换响应在网络中丢失”的场景:
+  // 客户端仍持有上一代 token,重试时不再被误判为会话失效。
   const row = await env.DB.prepare(
     `${sessionSelect}
-     WHERE s.refresh_hash = ?
+     WHERE (s.refresh_hash = ?
+            OR (s.prev_refresh_hash = ? AND s.prev_refresh_expires_at > ?))
        AND s.revoked_at IS NULL
        AND s.refresh_expires_at > ?`,
   )
-    .bind(hash, nowSeconds())
+    .bind(hash, hash, now, now)
     .first<SessionRow>()
   if (!row) throw new HttpError(401, 'refresh_token_expired', '设备授权已失效')
   assertEntitlement(row)
@@ -154,13 +159,19 @@ export async function issueSession(
   ] as const
 
   if (existingSessionId) {
+    // 轮换时把上一代 refresh_hash 保留进 prev 列(SITE 引用的是更新前的旧值),
+    // 有效期截断到宽限窗口,供丢失轮换响应的客户端重试。
+    const graceDeadline =
+      now + envInt(env.REFRESH_GRACE_SECONDS, 600, 0, 60 * 60)
     await env.DB.prepare(
       `UPDATE sessions
-       SET access_hash = ?, access_expires_at = ?, refresh_hash = ?,
+       SET prev_refresh_hash = refresh_hash,
+           prev_refresh_expires_at = MIN(refresh_expires_at, ?),
+           access_hash = ?, access_expires_at = ?, refresh_hash = ?,
            refresh_expires_at = ?, revoked_at = NULL, last_seen_at = ?
        WHERE id = ?`,
     )
-      .bind(...values, existingSessionId)
+      .bind(graceDeadline, ...values, existingSessionId)
       .run()
   } else {
     await env.DB.prepare(

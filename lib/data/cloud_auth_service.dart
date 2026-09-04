@@ -93,6 +93,7 @@ class CloudAuthService extends ChangeNotifier {
   static const _licenseKey = 'cloud_auth_license';
   static const _lastVerifiedKey = 'cloud_auth_last_verified';
   static const _offlineGraceKey = 'cloud_auth_offline_grace';
+  static const _inviteCodeKey = 'cloud_auth_invite_code';
 
   final Dio _dio = Dio(
     BaseOptions(
@@ -113,9 +114,11 @@ class CloudAuthService extends ChangeNotifier {
   int _refreshExpiresAt = 0;
   int _lastVerifiedAt = 0;
   int _offlineGraceSeconds = 48 * 60 * 60;
+  String _storedInviteCode = '';
   String _error = '';
   String _appVersion = '';
   bool _ready = false;
+  bool _reactivating = false;
   Future<void>? _refreshing;
   Timer? _timer;
 
@@ -174,7 +177,11 @@ class CloudAuthService extends ChangeNotifier {
       _appVersion = await _readAppVersion();
       await _loadStoredAuthorization();
       if (_accessToken.isEmpty && _refreshToken.isEmpty) {
-        _setState(CloudAuthState.activationRequired);
+        // 设备曾用邀请码激活过时,先尝试静默重新激活(服务端对同设备
+        // 同邀请码不消耗使用次数),失败才进入未激活状态。
+        if (!await _tryAutoReactivate()) {
+          _setState(CloudAuthState.activationRequired);
+        }
       } else {
         await verify(allowOffline: true);
       }
@@ -213,13 +220,18 @@ class CloudAuthService extends ChangeNotifier {
         },
       );
       await _acceptAuthorization(response);
+      // 记住邀请码,掉激活时可静默重新激活。
+      // 服务端对同设备 + 同邀请码的重激活不消耗邀请码使用次数。
+      _storedInviteCode = code;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_inviteCodeKey, code);
       LogService.instance.info(
         'CloudAuth',
         '设备授权成功',
         detail: '设备: ${device.deviceId.substring(0, 12)}',
       );
     } catch (e, stack) {
-      _handleAuthorizationFailure(e, stack: stack, activation: true);
+      await _handleAuthorizationFailure(e, stack: stack, activation: true);
       rethrow;
     }
   }
@@ -253,7 +265,7 @@ class CloudAuthService extends ChangeNotifier {
           await _acceptLicense(response);
           return;
         } catch (refreshError, refreshStack) {
-          _handleAuthorizationFailure(
+          await _handleAuthorizationFailure(
             refreshError,
             stack: refreshStack,
             allowOffline: allowOffline,
@@ -261,9 +273,9 @@ class CloudAuthService extends ChangeNotifier {
           return;
         }
       }
-      _handleAuthorizationFailure(e, stack: stack, allowOffline: allowOffline);
+      await _handleAuthorizationFailure(e, stack: stack, allowOffline: allowOffline);
     } catch (e, stack) {
-      _handleAuthorizationFailure(e, stack: stack, allowOffline: allowOffline);
+      await _handleAuthorizationFailure(e, stack: stack, allowOffline: allowOffline);
     }
   }
 
@@ -295,7 +307,7 @@ class CloudAuthService extends ChangeNotifier {
     final error = _errorFromResponse(responseBody);
     final failure = CloudAuthException(statusCode, error.$1, error.$2);
     if (statusCode == 403) {
-      _handleAuthorizationFailure(failure);
+      await _handleAuthorizationFailure(failure);
       return;
     }
     // 401 可能只是访问令牌刚好过期。走完整复验流程可先刷新令牌，
@@ -362,6 +374,7 @@ class CloudAuthService extends ChangeNotifier {
     _refreshExpiresAt = prefs.getInt(_refreshExpiryKey) ?? 0;
     _lastVerifiedAt = prefs.getInt(_lastVerifiedKey) ?? 0;
     _offlineGraceSeconds = prefs.getInt(_offlineGraceKey) ?? 48 * 60 * 60;
+    _storedInviteCode = prefs.getString(_inviteCodeKey) ?? '';
     final rawLicense = prefs.getString(_licenseKey);
     if (rawLicense != null && rawLicense.isNotEmpty) {
       try {
@@ -414,10 +427,11 @@ class CloudAuthService extends ChangeNotifier {
   Future<void> _ensureAccessToken() async {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     if (_accessToken.isNotEmpty && _accessExpiresAt > now + 60) return;
-    if (_refreshToken.isEmpty || _refreshExpiresAt <= now) {
-      await _clearAuthorization();
+    if (_refreshToken.isEmpty) {
       throw const CloudAuthException(401, 'refresh_expired', '设备授权已失效');
     }
+    // 不用设备本地时钟预判 refresh token 是否过期:设备时钟偏快时会
+    // 误杀仍有效的会话。过期与否交给服务端权威判定。
     await _refresh();
   }
 
@@ -575,12 +589,12 @@ class CloudAuthService extends ChangeNotifier {
     _setState(CloudAuthState.authorized);
   }
 
-  void _handleAuthorizationFailure(
+  Future<void> _handleAuthorizationFailure(
     Object error, {
     StackTrace? stack,
     bool allowOffline = false,
     bool activation = false,
-  }) {
+  }) async {
     final message = _messageOf(error);
     final authError = error is CloudAuthException ? error : null;
     LogService.instance.error(
@@ -600,9 +614,15 @@ class CloudAuthService extends ChangeNotifier {
       return;
     }
     if (authError?.statusCode == 401) {
-      unawaited(_clearAuthorization());
-      _error = message;
-      _setState(CloudAuthState.activationRequired);
+      // 刷新凭据被拒:先尝试用记住的邀请码静默重激活,覆盖“服务端已轮换
+      // refresh token、但轮换响应在网络中丢失,本地仍持旧凭据”的场景。
+      // 恢复失败才清空本地授权并要求手动激活。
+      final recovered = await _tryAutoReactivate();
+      if (!recovered) {
+        await _clearAuthorization();
+        _error = message;
+        _setState(CloudAuthState.activationRequired);
+      }
       return;
     }
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
@@ -620,6 +640,28 @@ class CloudAuthService extends ChangeNotifier {
       return;
     }
     _setError(message);
+  }
+
+  /// 使用记住的邀请码静默重新激活。服务端对同设备 + 同邀请码的重激活
+  /// 不消耗邀请码使用次数,因此该恢复路径对用户完全无感。
+  Future<bool> _tryAutoReactivate() async {
+    final code = _storedInviteCode;
+    if (code.isEmpty || _reactivating || !isConfigured) return false;
+    _reactivating = true;
+    try {
+      await activate(code);
+      LogService.instance.info('CloudAuth', '授权已自动恢复');
+      return true;
+    } catch (e) {
+      LogService.instance.warning(
+        'CloudAuth',
+        '授权自动恢复失败',
+        detail: '$e',
+      );
+      return false;
+    } finally {
+      _reactivating = false;
+    }
   }
 
   int _asInt(dynamic value, {int fallback = 0}) {
