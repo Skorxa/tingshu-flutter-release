@@ -1,9 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../music/screens/music_settings_screen.dart' show AppRestartNotifier;
-import '../music/music_source_manager.dart';
-import '../music/music_player_service.dart';
-import '../player/player_service.dart';
 import '../data/cloud_auth_service.dart';
 import '../data/listening_stats_service.dart';
 import '../data/settings_service.dart';
@@ -103,24 +99,6 @@ class _SourceScreenState extends State<SourceScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                children: [
                  const _ListeningStatsCard(),
-
-                  // 双模态
-                  _buildSection(
-                    title: '双模态',
-                    icon: Icons.swap_horizontal_circle_outlined,
-                    children: [
-                      ListTile(
-                        leading: const Icon(Icons.headphones),
-                        title: const Text('应用模式'),
-                        subtitle: Text(settings.appModeLabel),
-                        trailing: FilledButton.tonalIcon(
-                          icon: const Icon(Icons.music_note),
-                          label: const Text('切换到音乐'),
-                          onPressed: () => _switchToMusicMode(context),
-                        ),
-                      ),
-                    ],
-                  ),
 
                   _buildSection(
                     title: '授权',
@@ -444,40 +422,6 @@ class _SourceScreenState extends State<SourceScreen> {
   String _authorizationSubtitle(CloudAuthService auth) {
     final name = auth.license?.displayName.trim() ?? '';
     return name.isEmpty ? auth.stateLabel : '${auth.stateLabel} · $name';
-  }
-}
-
-extension on _SourceScreenState {
-  Future<void> _switchToMusicMode(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('切换到音乐模式'),
-        content: const Text('应用将重启以切换到音乐模式。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('切换'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    await PlayerService.instance.pause();
-    await SettingsService.instance.setAppMode('music');
-    // 运行时切换:初始化音乐服务
-    await MusicSourceManager.instance.ensureInitialized();
-    // AudioService 在 main() 中已初始化(听书 handler)。
-    // 运行时切换时无法重新 init,音乐播放器仍可前台播放,
-    // 后台通知仅在冷启动音乐模式时可用。
-    if (!MusicPlayerService.instance.hasHandler) {
-      MusicPlayerService.instance.attachHandlerWithoutService();
-    }
-    AppRestartNotifier.instance.notify();
   }
 }
 

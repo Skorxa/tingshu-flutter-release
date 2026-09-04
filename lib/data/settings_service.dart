@@ -75,13 +75,6 @@ class SettingsService extends ChangeNotifier {
  int get discoverRevision => _discoverRevision;
  bool get ready => _ready;
 
-  // ── 双模态:应用模式(tingshu / music) ──
-  static const _kAppMode = 'settings_app_mode';
-  String _appMode = 'tingshu';
-  String get appMode => _appMode;
-  bool get isMusicMode => _appMode == 'music';
-  String get appModeLabel => _appMode == 'music' ? '音乐模式' : '听书模式';
-
   bool isDiscoverSourceSelected(String sourceId) {
     return !_discoverSelectionConfigured ||
         _discoverSourceIds.contains(sourceId);
@@ -139,7 +132,6 @@ class SettingsService extends ChangeNotifier {
         .toList();
    _discoverSelectionConfigured =
        prefs.getBool(_kDiscoverSelectionConfigured) ?? false;
-    _appMode = prefs.getString(_kAppMode) ?? 'tingshu';
    _ready = true;
   }
 
@@ -243,13 +235,5 @@ class SettingsService extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_kDiscoverSourceIds, _discoverSourceIds);
     await prefs.setBool(_kDiscoverSelectionConfigured, true);
-  }
-
-  Future<void> setAppMode(String mode) async {
-    if (mode != 'tingshu' && mode != 'music') return;
-    _appMode = mode;
-    notifyListeners();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kAppMode, mode);
   }
 }
