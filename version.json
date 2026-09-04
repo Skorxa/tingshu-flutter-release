@@ -2,7 +2,7 @@
   "versionName": "1.3.0",
   "versionCode": 11,
   "force": false,
-  "changelog": "自动构建版本 1.3.0",
+  "changelog": "移除音乐模式，专注听书；修复激活码概率性掉激活；新增 WebDAV 多设备加密同步（独立配置入口，进度/书架/设置/音源）",
   "sha256": "7f82112d44494b78663d86779352547768a99ff38155e0dfea004091eebcc5d5",
   "size": 26342359,
   "publishedAt": "2026-09-04T14:24:34Z",
