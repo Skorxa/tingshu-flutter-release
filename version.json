@@ -2,7 +2,7 @@
   "versionName": "1.4.0",
   "versionCode": 12,
   "force": false,
-  "changelog": "自动构建版本 1.4.0",
+  "changelog": "移除音乐模式，专注听书；修复激活码概率性掉激活；新增 WebDAV 多设备加密同步（独立配置入口，进度/书架/设置/音源）",
   "sha256": "5e83f9470ccb9566cde5985eb0822c966f8db954349741b5728bffd3610cf74f",
   "size": 26342359,
   "publishedAt": "2026-09-04T14:39:24Z",
