@@ -501,13 +501,6 @@ class WebDavService extends ChangeNotifier {
     return auth.isEmpty ? const {} : {'Authorization': auth};
   }
 
-  /// 将相对路径拼接到当前账号的根目录下。
-  String pathUnderRoot(String relative) {
-    final root = _normalizePath(_config.rootPath);
-    final rel = relative.startsWith('/') ? relative : '/$relative';
-    return _normalizePath(root == '/' ? rel : '$root$rel');
-  }
-
   /// 读取远端文本文件;不存在(404)时返回 null。
   Future<String?> getString(String path) async {
     if (!_config.ready) throw Exception('请先配置 WebDAV');

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:pointycastle/export.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -13,8 +14,209 @@ import 'settings_service.dart';
 import 'shelf_service.dart';
 import 'webdav_service.dart';
 
+/// 数据同步专用的 WebDAV 服务器配置。
+/// 与网盘书库的 WebDAV 账号互相独立,互不影响。
+class WebDavSyncConfig {
+  final String baseUrl;
+  final String username;
+  final String password;
+  final String remoteDir;
+
+  const WebDavSyncConfig({
+    this.baseUrl = '',
+    this.username = '',
+    this.password = '',
+    this.remoteDir = '/JuTingSync',
+  });
+
+  bool get ready => baseUrl.trim().isNotEmpty;
+
+  Map<String, dynamic> toJson() => {
+    'baseUrl': baseUrl,
+    'username': username,
+    'password': password,
+    'remoteDir': remoteDir,
+  };
+
+  factory WebDavSyncConfig.fromJson(Map<String, dynamic> map) =>
+      WebDavSyncConfig(
+        baseUrl: '${map['baseUrl'] ?? ''}',
+        username: '${map['username'] ?? ''}',
+        password: '${map['password'] ?? ''}',
+        remoteDir: '${map['remoteDir'] ?? ''}',
+      );
+}
+
+/// 同步专用的轻量 WebDAV 客户端:只支持读文本 / 写文本 / 建目录 / 连通性测试。
+class _SyncDavClient {
+  _SyncDavClient(this._config);
+
+  final WebDavSyncConfig _config;
+  final Dio _dio = Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 60),
+      sendTimeout: const Duration(seconds: 60),
+    ),
+  );
+
+  Map<String, String> get _authHeader {
+    if (_config.username.isEmpty && _config.password.isEmpty) return const {};
+    final token = base64Encode(
+      utf8.encode('${_config.username}:${_config.password}'),
+    );
+    return {'Authorization': 'Basic $token'};
+  }
+
+  String _normalizePath(String value) {
+    var path = value.trim();
+    if (path.isEmpty) path = '/';
+    if (!path.startsWith('/')) path = '/$path';
+    return path.replaceAll(RegExp(r'/+'), '/');
+  }
+
+  String resolveUrl(String path) {
+    final base = _config.baseUrl.trim().replaceAll(RegExp(r'/+$'), '');
+    final baseUri = Uri.parse(base.endsWith('/') ? base : '$base/');
+    final normalized = _normalizePath(path);
+    final relative = normalized == '/'
+        ? ''
+        : normalized
+              .substring(1)
+              .split('/')
+              .map(Uri.encodeComponent)
+              .join('/');
+    return baseUri.resolve(relative).toString();
+  }
+
+  String _friendlyError(DioException e, String action) {
+    final status = e.response?.statusCode;
+    final url = e.requestOptions.uri.toString();
+    if (status == 401 || status == 403) {
+      return '$action失败：认证被拒绝（$status），请检查账号密码\n$url';
+    }
+    if (status == 404) {
+      return '$action失败：路径不存在（404）\n$url';
+    }
+    if (status != null) {
+      return '$action失败：HTTP $status\n$url';
+    }
+    return '$action失败：${e.message ?? e.type.name}\n$url';
+  }
+
+  /// PROPFIND Depth:0 验证服务器可达且凭据正确。
+  Future<void> testConnection() async {
+    final url = resolveUrl(_normalizePath(_config.remoteDir));
+    final Response<dynamic> response;
+    try {
+      response = await _dio.request<dynamic>(
+        url,
+        options: Options(
+          method: 'PROPFIND',
+          headers: {'Depth': '0', ..._authHeader},
+          validateStatus: (_) => true,
+        ),
+      );
+    } on DioException catch (e) {
+      throw Exception(_friendlyError(e, '连接测试'));
+    }
+    final status = response.statusCode ?? 0;
+    if (status == 404) {
+      throw Exception(
+        '连接成功但远程目录不存在，保存后首次同步会自动创建\n${_config.remoteDir}',
+      );
+    }
+    if (status < 200 || status >= 300) {
+      throw Exception('连接测试失败：HTTP $status\n$url');
+    }
+  }
+
+  Future<String?> getString(String path) async {
+    final Response<String> response;
+    try {
+      response = await _dio.request<String>(
+        resolveUrl(path),
+        options: Options(
+          method: 'GET',
+          responseType: ResponseType.plain,
+          headers: _authHeader,
+          validateStatus: (_) => true,
+        ),
+      );
+    } on DioException catch (e) {
+      throw Exception(_friendlyError(e, '下载'));
+    }
+    final status = response.statusCode ?? 0;
+    if (status == 404) return null;
+    if (status < 200 || status >= 300) {
+      throw Exception('WebDAV 下载失败（HTTP $status）\n路径: $path');
+    }
+    return response.data;
+  }
+
+  Future<void> putString(String path, String content) async {
+    final normalized = _normalizePath(path);
+    final segments =
+        normalized.split('/').where((segment) => segment.isNotEmpty).toList();
+    var current = '';
+    for (final segment in segments.take(segments.length - 1)) {
+      current = '$current/$segment';
+      await _mkcolLenient(current);
+    }
+    final Response<List<int>> response;
+    try {
+      response = await _dio.request<List<int>>(
+        resolveUrl(normalized),
+        data: utf8.encode(content),
+        options: Options(
+          method: 'PUT',
+          contentType: 'application/octet-stream',
+          headers: _authHeader,
+          validateStatus: (_) => true,
+        ),
+      );
+    } on DioException catch (e) {
+      throw Exception(_friendlyError(e, '上传'));
+    }
+    final status = response.statusCode ?? 0;
+    if (status < 200 || status >= 300) {
+      throw Exception('WebDAV 上传失败（HTTP $status）\n路径: $normalized');
+    }
+  }
+
+  Future<void> _mkcolLenient(String path) async {
+    try {
+      final response = await _dio.request<String>(
+        resolveUrl(path),
+        options: Options(
+          method: 'MKCOL',
+          responseType: ResponseType.plain,
+          headers: _authHeader,
+          validateStatus: (_) => true,
+        ),
+      );
+      final status = response.statusCode ?? 0;
+      // 405 = 目录已存在;301/409 = 部分服务器对已存在目录的返回,继续尝试。
+      if (status >= 200 && status < 300) return;
+      if (status == 405 || status == 301 || status == 409) return;
+      LogService.instance.warning(
+        'Sync',
+        '创建远程目录未成功(继续尝试上传)',
+        detail: '目录: $path\nHTTP $status',
+      );
+    } on DioException catch (e) {
+      LogService.instance.warning(
+        'Sync',
+        '创建远程目录请求失败(继续尝试上传)',
+        detail: '目录: $path\n${e.message ?? e.type.name}',
+      );
+    }
+  }
+}
+
 /// 基于 WebDAV 的多设备数据同步。
 ///
+/// - 使用独立于网盘书库的 WebDAV 服务器配置,互不影响。
 /// - 数据整体打包为 JSON 后用 AES-256-CBC + HMAC-SHA256 加密存储,
 ///   云端不出现任何明文(音源 Cookie、登录凭据等都在密文内)。
 /// - 加密密钥由用户设置的"同步密码"经 PBKDF2 派生,所有设备必须
@@ -33,8 +235,9 @@ class WebDavSyncService extends ChangeNotifier {
   static const _kLastSyncAt = 'sync_last_sync_at';
   static const _kLastResult = 'sync_last_result';
   static const _kDeviceTag = 'sync_device_tag';
+  static const _kConfig = 'sync_webdav_config';
 
-  static const _syncFileName = '/JuTingSync/juting_sync.json';
+  static const defaultRemoteDir = '/JuTingSync';
 
   /// 自动同步的最小间隔,防止高频操作触发风暴。
   static const _minSyncIntervalMs = 90 * 1000;
@@ -42,6 +245,9 @@ class WebDavSyncService extends ChangeNotifier {
 
   final Random _random = Random.secure();
 
+  WebDavSyncConfig _config = const WebDavSyncConfig();
+  _SyncDavClient? _clientCache;
+  WebDavSyncConfig? _clientConfig;
   bool _enabled = false;
   String _password = '';
   int _lastSyncAt = 0;
@@ -59,19 +265,51 @@ class WebDavSyncService extends ChangeNotifier {
   Timer? _timer;
   Timer? _startupTimer;
 
+  WebDavSyncConfig get config => _config;
   bool get enabled => _enabled;
   bool get hasPassword => _password.isNotEmpty;
   int get lastSyncAt => _lastSyncAt;
   String get lastResult => _lastResult;
   bool get syncing => _syncing;
-  bool get webDavReady => WebDavService.instance.ready;
-  bool get canSync => webDavReady && _password.isNotEmpty;
 
-  String get syncFilePath {
-    final root = WebDavService.instance.config.rootPath.trim();
-    if (root.isEmpty || root == '/') return _syncFileName;
-    final normalized = root.startsWith('/') ? root : '/$root';
-    return '$normalized$_syncFileName';
+  /// 同步服务器是否已配置(独立于网盘书库的 WebDAV 账号)。
+  bool get serverReady => _config.ready;
+  bool get canSync => serverReady && _password.isNotEmpty;
+
+  _SyncDavClient get _client {
+    if (_clientConfig != _config) {
+      _clientCache = _SyncDavClient(_config);
+      _clientConfig = _config;
+    }
+    return _clientCache!;
+  }
+
+  String get syncFilePath =>
+      '${_normalizeRemoteDir(_config.remoteDir)}/juting_sync.json';
+
+  String _normalizeRemoteDir(String value) {
+    var path = value.trim();
+    if (path.isEmpty) path = defaultRemoteDir;
+    if (!path.startsWith('/')) path = '/$path';
+    return path.replaceAll(RegExp(r'/+'), '/');
+  }
+
+  /// 保存同步服务器配置(独立于网盘书库)。
+  Future<void> saveConfig(WebDavSyncConfig config) async {
+    _config = WebDavSyncConfig(
+      baseUrl: config.baseUrl.trim(),
+      username: config.username.trim(),
+      password: config.password,
+      remoteDir: _normalizeRemoteDir(config.remoteDir),
+    );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kConfig, jsonEncode(_config.toJson()));
+    LogService.instance.info(
+      'Sync',
+      '同步服务器配置已保存',
+      detail: '地址: ${_config.baseUrl}\n远程目录: ${_config.remoteDir}',
+    );
+    notifyListeners();
   }
 
   Future<void> init() async {
@@ -81,6 +319,33 @@ class WebDavSyncService extends ChangeNotifier {
     _lastSyncAt = prefs.getInt(_kLastSyncAt) ?? 0;
     _lastResult = prefs.getString(_kLastResult) ?? '';
     _deviceTag = prefs.getString(_kDeviceTag) ?? '';
+    final rawConfig = prefs.getString(_kConfig);
+    if (rawConfig != null && rawConfig.isNotEmpty) {
+      try {
+        _config = WebDavSyncConfig.fromJson(
+          Map<String, dynamic>.from(jsonDecode(rawConfig) as Map),
+        );
+      } catch (e) {
+        LogService.instance.warning('Sync', '同步配置读取失败', detail: '$e');
+      }
+    }
+    // 兼容迁移:同步配置为空且书库已配置 WebDAV 时,复制书库当前账号。
+    // 此后两者完全独立,互不影响。
+    if (!_config.ready && WebDavService.instance.ready) {
+      final book = WebDavService.instance.config;
+      _config = WebDavSyncConfig(
+        baseUrl: book.baseUrl,
+        username: book.username,
+        password: book.password,
+        remoteDir: defaultRemoteDir,
+      );
+      await prefs.setString(_kConfig, jsonEncode(_config.toJson()));
+      LogService.instance.info(
+        'Sync',
+        '已从网盘书库导入 WebDAV 账号作为同步服务器',
+        detail: '地址: ${_config.baseUrl}\n此后两者独立配置,互不影响',
+      );
+    }
     if (_deviceTag.isEmpty) {
       _deviceTag = base64Url
           .encode(List<int>.generate(3, (_) => _random.nextInt(256)))
@@ -162,6 +427,9 @@ class WebDavSyncService extends ChangeNotifier {
     }
   }
 
+  /// 用当前保存的同步服务器配置做连通性测试(独立于网盘书库)。
+  Future<void> testConnection() => _client.testConnection();
+
   Future<void> setPassword(String value) async {
     _password = value.trim();
     final prefs = await SharedPreferences.getInstance();
@@ -172,7 +440,7 @@ class WebDavSyncService extends ChangeNotifier {
   /// 合并式同步:拉取云端 → 合并应用 → 推送合并结果。
   Future<void> syncNow({String reason = 'manual'}) async {
     if (_syncing) return;
-    if (!webDavReady) {
+    if (!serverReady) {
       _setLastResult('未配置 WebDAV,请先在网盘页配置账号');
       return;
     }
@@ -185,7 +453,7 @@ class WebDavSyncService extends ChangeNotifier {
     _localDirty = false;
     notifyListeners();
     try {
-      final remoteText = await WebDavService.instance.getString(syncFilePath);
+      final remoteText = await _client.getString(syncFilePath);
       Map<String, dynamic>? remote;
       if (remoteText != null && remoteText.trim().isNotEmpty) {
         remote = _decryptEnvelope(remoteText);
@@ -200,7 +468,7 @@ class WebDavSyncService extends ChangeNotifier {
       final merged = await _buildPayload();
       if (remote == null || _sortedJson(merged) != _sortedJson(remote)) {
         final envelope = _encryptEnvelope(jsonEncode(merged));
-        await WebDavService.instance.putString(syncFilePath, envelope);
+        await _client.putString(syncFilePath, envelope);
         _lastResult = remote == null ? '已上传本地数据' : '已合并并上传';
       } else {
         _lastResult = '云端与本地一致';
@@ -230,7 +498,7 @@ class WebDavSyncService extends ChangeNotifier {
   /// 手动备份:用本地数据整体覆盖云端。
   Future<void> uploadSnapshot() async {
     if (_syncing) return;
-    if (!webDavReady) {
+    if (!serverReady) {
       _setLastResult('未配置 WebDAV,请先在网盘页配置账号');
       return;
     }
@@ -243,7 +511,7 @@ class WebDavSyncService extends ChangeNotifier {
     try {
       final payload = await _buildPayload();
       final envelope = _encryptEnvelope(jsonEncode(payload));
-      await WebDavService.instance.putString(syncFilePath, envelope);
+      await _client.putString(syncFilePath, envelope);
       _lastSyncAt = DateTime.now().millisecondsSinceEpoch;
       _lastResult = '已上传本地数据';
       _refreshStamps();
@@ -270,7 +538,7 @@ class WebDavSyncService extends ChangeNotifier {
   /// 手动恢复:拉取云端并合并到本地,不上传。
   Future<void> downloadAndMerge() async {
     if (_syncing) return;
-    if (!webDavReady) {
+    if (!serverReady) {
       _setLastResult('未配置 WebDAV,请先在网盘页配置账号');
       return;
     }
@@ -281,7 +549,7 @@ class WebDavSyncService extends ChangeNotifier {
     _syncing = true;
     notifyListeners();
     try {
-      final remoteText = await WebDavService.instance.getString(syncFilePath);
+      final remoteText = await _client.getString(syncFilePath);
       if (remoteText == null || remoteText.trim().isEmpty) {
         _lastResult = '云端还没有同步数据';
         return;
