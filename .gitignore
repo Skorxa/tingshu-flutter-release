@@ -66,3 +66,9 @@ anr_*.txt
 /android/app/upload-keystore.jks
 # Claude Code 本地设置 (保留 .claude/skills 入版本)
 .claude/settings.local.json
+# 本地参考与临时文件
+/6a868cc44545e.json
+/77067c60f79e5d06e9d5c6a0a8e9a3ef.json
+/lx-lxwalnut-music-mobile/
+/lx源/
+/聆阅_1.1.3_听书API.md
