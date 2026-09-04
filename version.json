@@ -1,12 +1,12 @@
 {
-  "versionName": "1.2.4",
-  "versionCode": 10,
+  "versionName": "1.3.0",
+  "versionCode": 11,
   "force": false,
-  "changelog": "自动构建版本 1.2.4",
-  "sha256": "0e8b9d46db1a60c852eaf226059d19976d5f3b76b1f8ecc95a8978262772953e",
-  "size": 26293559,
-  "publishedAt": "2026-08-04T06:26:32Z",
+  "changelog": "自动构建版本 1.3.0",
+  "sha256": "81a991381d31e9f163c761598212da3eb684a0c339250f5d708c04065c6ab3f6",
+  "size": 26342379,
+  "publishedAt": "2026-09-04T13:45:24Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.2.4/tingshu-1.2.4-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.3.0/tingshu-1.3.0-arm64.apk"
   ]
 }
