@@ -11,6 +11,7 @@ import 'data/settings_service.dart';
 import 'data/theme_service.dart';
 import 'data/webdav_service.dart';
 import 'data/alist_service.dart';
+import 'data/webdav_sync_service.dart';
 import 'player/audio_handler.dart';
 import 'player/player_service.dart';
 import 'source/source_manager.dart';
@@ -108,6 +109,12 @@ Future<void> main() async {
     LogService.instance.info('Alist', '配置加载完成');
   } catch (e, stack) {
     LogService.instance.error('Alist', '配置加载失败', error: e, stack: stack);
+  }
+  try {
+    await WebDavSyncService.instance.init();
+    LogService.instance.info('Sync', 'WebDAV 同步服务初始化完成');
+  } catch (e, stack) {
+    LogService.instance.error('Sync', 'WebDAV 同步服务初始化失败', error: e, stack: stack);
   }
 
   ThemeService.instance; // 触发构造:启动封面取色监听

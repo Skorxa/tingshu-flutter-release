@@ -5,6 +5,10 @@ class ProgressService {
   ProgressService._();
   static final instance = ProgressService._();
 
+  /// 最近一次保存进度的毫秒时间戳(内存),供 WebDAV 同步检测变更。
+  int _lastSavedAt = 0;
+  int get lastSavedAt => _lastSavedAt;
+
   Future<void> save({
     required String sourceId,
     required String bookId,
@@ -17,6 +21,7 @@ class ProgressService {
     required double duration,
   }) async {
     final db = await getDb();
+    _lastSavedAt = DateTime.now().millisecondsSinceEpoch;
     await db.insert('play_progress', {
       'sourceId': sourceId,
       'bookId': bookId,
@@ -93,5 +98,56 @@ class ProgressService {
   Future<void> clearHistory() async {
     final db = await getDb();
     await db.delete('play_progress');
+  }
+
+  /// 导出播放进度用于 WebDAV 同步(限制条数以控制负载)。
+  Future<List<Map<String, dynamic>>> listForSync({int limit = 800}) async {
+    final db = await getDb();
+    final rows = await db.query(
+      'play_progress',
+      orderBy: 'updatedAt DESC',
+      limit: limit,
+    );
+    return rows.map((row) => Map<String, dynamic>.from(row)).toList();
+  }
+
+  /// WebDAV 同步合并:按 (sourceId, bookId) 取 updatedAt 较新的记录。
+  /// 返回应用的变更条数。
+  Future<int> mergeFromSync(List<Map<String, dynamic>> rows) async {
+    if (rows.isEmpty) return 0;
+    final db = await getDb();
+    final local = await db.query('play_progress');
+    final localByKey = <String, Map<String, dynamic>>{
+      for (final row in local) '${row['sourceId']}|${row['bookId']}': row,
+    };
+    final batch = db.batch();
+    var changed = 0;
+    for (final row in rows) {
+      final sourceId = '${row['sourceId'] ?? ''}';
+      final bookId = '${row['bookId'] ?? ''}';
+      if (bookId.isEmpty) continue;
+      final updatedAt = (row['updatedAt'] as num?)?.toInt() ?? 0;
+      final existing = localByKey['$sourceId|$bookId'];
+      if (existing != null &&
+          ((existing['updatedAt'] as int?) ?? 0) >= updatedAt) {
+        continue;
+      }
+      batch.insert('play_progress', {
+        'sourceId': sourceId,
+        'bookId': bookId,
+        'bookTitle': '${row['bookTitle'] ?? ''}',
+        'cover': '${row['cover'] ?? ''}',
+        'chapterId': '${row['chapterId'] ?? ''}',
+        'chapterName': '${row['chapterName'] ?? ''}',
+        'chapterIdx': (row['chapterIdx'] as num?)?.toInt() ?? 0,
+        'currentTime': (row['currentTime'] as num?)?.toDouble() ?? 0.0,
+        'duration': (row['duration'] as num?)?.toDouble() ?? 0.0,
+        'updatedAt': updatedAt,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      changed++;
+    }
+    if (changed == 0) return 0;
+    await batch.commit(noResult: true);
+    return changed;
   }
 }

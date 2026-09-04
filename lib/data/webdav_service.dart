@@ -501,6 +501,105 @@ class WebDavService extends ChangeNotifier {
     return auth.isEmpty ? const {} : {'Authorization': auth};
   }
 
+  /// 将相对路径拼接到当前账号的根目录下。
+  String pathUnderRoot(String relative) {
+    final root = _normalizePath(_config.rootPath);
+    final rel = relative.startsWith('/') ? relative : '/$relative';
+    return _normalizePath(root == '/' ? rel : '$root$rel');
+  }
+
+  /// 读取远端文本文件;不存在(404)时返回 null。
+  Future<String?> getString(String path) async {
+    if (!_config.ready) throw Exception('请先配置 WebDAV');
+    final url = resolveUrl(path);
+    final Response<String> response;
+    try {
+      response = await _dio.request<String>(
+        url,
+        options: Options(
+          method: 'GET',
+          responseType: ResponseType.plain,
+          headers: {
+            if (_authHeader().isNotEmpty) 'Authorization': _authHeader(),
+          },
+          validateStatus: (_) => true,
+        ),
+      );
+    } on DioException catch (e) {
+      throw Exception(_friendlyDioError(e));
+    }
+    final status = response.statusCode ?? 0;
+    if (status == 404) return null;
+    if (status < 200 || status >= 300) {
+      throw Exception('WebDAV 下载失败（HTTP $status）\n路径: $path');
+    }
+    return response.data;
+  }
+
+  /// 上传文本文件,自动逐级创建缺失的父目录。
+  Future<void> putString(String path, String content) async {
+    if (!_config.ready) throw Exception('请先配置 WebDAV');
+    final normalized = _normalizePath(path);
+    final segments = normalized
+        .split('/')
+        .where((segment) => segment.isNotEmpty)
+        .toList();
+    var current = '';
+    for (final segment in segments.take(segments.length - 1)) {
+      current = '$current/$segment';
+      await _mkcolLenient(current);
+    }
+    final url = resolveUrl(normalized);
+    final response = await _dio.request<List<int>>(
+      url,
+      data: utf8.encode(content),
+      options: Options(
+        method: 'PUT',
+        contentType: 'application/octet-stream',
+        headers: {
+          if (_authHeader().isNotEmpty) 'Authorization': _authHeader(),
+        },
+        validateStatus: (_) => true,
+      ),
+    );
+    final status = response.statusCode ?? 0;
+    if (status < 200 || status >= 300) {
+      throw Exception('WebDAV 上传失败（HTTP $status）\n路径: $normalized');
+    }
+  }
+
+  Future<void> _mkcolLenient(String path) async {
+    final url = resolveUrl(path);
+    try {
+      final response = await _dio.request<String>(
+        url,
+        options: Options(
+          method: 'MKCOL',
+          responseType: ResponseType.plain,
+          headers: {
+            if (_authHeader().isNotEmpty) 'Authorization': _authHeader(),
+          },
+          validateStatus: (_) => true,
+        ),
+      );
+      final status = response.statusCode ?? 0;
+      // 405 表示目录已存在,视为成功;其他失败交给最终 PUT 报错。
+      if (status >= 200 && status < 300) return;
+      if (status == 405 || status == 301 || status == 409) return;
+      LogService.instance.warning(
+        'WebDAV',
+        '创建目录未成功(继续尝试上传)',
+        detail: '目录: $path\nHTTP $status',
+      );
+    } on DioException catch (e) {
+      LogService.instance.warning(
+        'WebDAV',
+        '创建目录请求失败(继续尝试上传)',
+        detail: '目录: $path\n${e.message ?? e.type.name}',
+      );
+    }
+  }
+
   String _authHeader() {
     return _authHeaderFor(_config);
   }

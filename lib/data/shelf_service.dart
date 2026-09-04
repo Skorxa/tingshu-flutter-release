@@ -33,6 +33,11 @@ class ShelfService extends ChangeNotifier {
   ShelfService._();
   static final instance = ShelfService._();
 
+  bool _applyingSync = false;
+
+  /// WebDAV 同步合并过程中为 true,监听方据此忽略本次通知。
+  bool get applyingSync => _applyingSync;
+
   Future<void> add({
     required String sourceId,
     required String bookId,
@@ -118,5 +123,49 @@ class ShelfService extends ChangeNotifier {
     final db = await getDb();
     final rows = await db.query('shelf', orderBy: 'addTime DESC');
     return rows.map(ShelfBook.fromMap).toList();
+  }
+
+  /// WebDAV 同步合并:按 (sourceId, bookId) 取 addTime 较新的记录。
+  /// 返回应用的变更条数。
+  Future<int> mergeFromSync(List<Map<String, dynamic>> rows) async {
+    if (rows.isEmpty) return 0;
+    final db = await getDb();
+    final local = await db.query('shelf');
+    final localByKey = <String, Map<String, dynamic>>{
+      for (final row in local) '${row['sourceId']}|${row['bookId']}': row,
+    };
+    final batch = db.batch();
+    var changed = 0;
+    for (final row in rows) {
+      final sourceId = '${row['sourceId'] ?? ''}';
+      final bookId = '${row['bookId'] ?? ''}';
+      if (sourceId.isEmpty || bookId.isEmpty) continue;
+      final addTime = (row['addTime'] as num?)?.toInt() ?? 0;
+      final existing = localByKey['$sourceId|$bookId'];
+      if (existing != null && ((existing['addTime'] as int?) ?? 0) >= addTime) {
+        continue;
+      }
+      batch.insert('shelf', {
+        'sourceId': sourceId,
+        'bookId': bookId,
+        'title': '${row['title'] ?? ''}',
+        'cover': '${row['cover'] ?? ''}',
+        'author': '${row['author'] ?? ''}',
+        'sourceName': '${row['sourceName'] ?? ''}',
+        'addTime': addTime,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      changed++;
+    }
+    if (changed == 0) return 0;
+    await batch.commit(noResult: true);
+    LogService.instance.info(
+      'Shelf',
+      '已合并云端书架',
+      detail: '更新条数: $changed',
+    );
+    _applyingSync = true;
+    notifyListeners();
+    _applyingSync = false;
+    return changed;
   }
 }

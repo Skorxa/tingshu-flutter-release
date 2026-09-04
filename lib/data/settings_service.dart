@@ -42,6 +42,7 @@ class SettingsService extends ChangeNotifier {
   static const _kDiscoverSourceIds = 'settings_discover_source_ids';
  static const _kDiscoverSelectionConfigured =
      'settings_discover_selection_configured';
+ static const _kChangedAt = 'settings_changed_at';
 
   bool _darkMode = false;
   bool _androidAudioOffload = false;
@@ -57,7 +58,13 @@ class SettingsService extends ChangeNotifier {
  List<String> _discoverSourceIds = [];
  bool _discoverSelectionConfigured = false;
  int _discoverRevision = 0;
+ int _settingsChangedAt = 0;
+ bool _applyingRemote = false;
  bool _ready = false;
+
+ /// 设置最后一次变更的毫秒时间戳,供 WebDAV 同步做新旧比较。
+ int get settingsChangedAt => _settingsChangedAt;
+ bool get isApplyingRemote => _applyingRemote;
 
   bool get darkMode => _darkMode;
   bool get androidAudioOffload => _androidAudioOffload;
@@ -132,7 +139,103 @@ class SettingsService extends ChangeNotifier {
         .toList();
    _discoverSelectionConfigured =
        prefs.getBool(_kDiscoverSelectionConfigured) ?? false;
+   _settingsChangedAt = prefs.getInt(_kChangedAt) ?? 0;
    _ready = true;
+  }
+
+  /// 导出设置用于 WebDAV 同步。
+  Map<String, dynamic> exportForSync() {
+    return {
+      'darkMode': _darkMode,
+      'androidAudioOffload': _androidAudioOffload,
+      'aggregateSearch': _aggregateSearch,
+      'dynamicColor': _dynamicColor,
+      'searchMatchMode': _searchMatchMode,
+      'autoCache': _autoCache,
+      'maxCacheChapters': _maxCacheChapters,
+      'cacheFrequency': _cacheFrequency,
+      'cleanupLimit': _cleanupLimit,
+      'cacheSpaceLimit': _cacheSpaceLimit,
+      'updateManifestUrl': _updateManifestUrl,
+      'discoverSourceIds': List<String>.from(_discoverSourceIds),
+      'discoverSelectionConfigured': _discoverSelectionConfigured,
+    };
+  }
+
+  /// 应用 WebDAV 同步下来的远端设置(整体覆盖)。
+  Future<void> applyRemoteSettings(
+    Map<String, dynamic> data, {
+    required int changedAt,
+  }) async {
+    _applyingRemote = true;
+    try {
+      _darkMode = data['darkMode'] == true;
+      _androidAudioOffload = data['androidAudioOffload'] == true;
+      _aggregateSearch = data['aggregateSearch'] != false;
+      _dynamicColor = data['dynamicColor'] != false;
+      _searchMatchMode = data['searchMatchMode'] == 'exact'
+          ? 'exact'
+          : 'fuzzy';
+      _autoCache = data['autoCache'] == true;
+      _maxCacheChapters = _validInt(
+        (data['maxCacheChapters'] as num?)?.toInt(),
+        cacheChapterOptions,
+        3,
+      );
+      _cacheFrequency = data['cacheFrequency'] == 'fast' ? 'fast' : 'standard';
+      _cleanupLimit = _validInt(
+        (data['cleanupLimit'] as num?)?.toInt(),
+        cleanupLimitOptions,
+        100,
+      );
+      _cacheSpaceLimit = _validInt(
+        (data['cacheSpaceLimit'] as num?)?.toInt(),
+        cacheSpaceLimitOptions,
+        0,
+      );
+      _updateManifestUrl = '${data['updateManifestUrl'] ?? ''}';
+      _discoverSourceIds =
+          ((data['discoverSourceIds'] as List?) ?? const [])
+              .map((e) => '$e')
+              .where((id) => id.trim().isNotEmpty)
+              .toList();
+      _discoverSelectionConfigured =
+          data['discoverSelectionConfigured'] == true;
+      _discoverRevision++;
+      _settingsChangedAt = changedAt;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_kDarkMode, _darkMode);
+      await prefs.setBool(_kAndroidAudioOffload, _androidAudioOffload);
+      await prefs.setBool(_kAggregateSearch, _aggregateSearch);
+      await prefs.setBool(_kDynamicColor, _dynamicColor);
+      await prefs.setString(_kSearchMatchMode, _searchMatchMode);
+      await prefs.setBool(_kAutoCache, _autoCache);
+      await prefs.setInt(_kMaxCacheChapters, _maxCacheChapters);
+      await prefs.setString(_kCacheFrequency, _cacheFrequency);
+      await prefs.setInt(_kCleanupLimit, _cleanupLimit);
+      await prefs.setInt(_kCacheSpaceLimit, _cacheSpaceLimit);
+      await prefs.setString(_kUpdateManifestUrl, _updateManifestUrl);
+      await prefs.setStringList(_kDiscoverSourceIds, _discoverSourceIds);
+      await prefs.setBool(
+        _kDiscoverSelectionConfigured,
+        _discoverSelectionConfigured,
+      );
+      await prefs.setInt(_kChangedAt, _settingsChangedAt);
+    } finally {
+      _applyingRemote = false;
+    }
+    notifyListeners();
+  }
+
+  @override
+  void notifyListeners() {
+    // 远端应用过程产生的通知不刷新本地变更时间戳。
+    if (_ready && !_applyingRemote) {
+      _settingsChangedAt = DateTime.now().millisecondsSinceEpoch;
+      SharedPreferences.getInstance()
+          .then((prefs) => prefs.setInt(_kChangedAt, _settingsChangedAt));
+    }
+    super.notifyListeners();
   }
 
   int _validInt(int? value, List<int> options, int fallback) {

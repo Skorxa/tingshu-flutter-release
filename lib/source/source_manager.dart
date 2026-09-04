@@ -120,6 +120,7 @@ class SourceManager {
   static const _kActive = 'active_source_id';
   static const _kSubscriptionUrl = 'audio_source_subscription_url';
   static const _kSubscriptions = 'audio_source_subscriptions';
+  static const _kChangedAt = 'audio_sources_changed_at';
 
   static const _removedBundledIds = {
     'yuanqi',
@@ -164,7 +165,12 @@ class SourceManager {
   final Map<String, Future<void>> _registering = {};
   final Map<String, Future<SourceSubscriptionResult>> _syncingSubscriptions =
       {};
+  int _changedAt = 0;
   bool _ready = false;
+
+  /// 音源数据(列表/排序/配置/订阅)最后一次变更的毫秒时间戳,
+  /// 供 WebDAV 同步做新旧比较。
+  int get lastChangedAt => _changedAt;
 
   Future<void> init() async {
     if (_ready) return;
@@ -186,6 +192,7 @@ class SourceManager {
         ..clear()
         ..addAll(list.map((e) => Map<String, dynamic>.from(e as Map)));
     }
+    _changedAt = prefs.getInt(_kChangedAt) ?? 0;
 
     final before = _stored.length;
     _stored.removeWhere((source) {
@@ -218,11 +225,61 @@ class SourceManager {
   }
 
   Future<void> _persist() async {
+    _changedAt = DateTime.now().millisecondsSinceEpoch;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kSources, jsonEncode(_stored));
     await prefs.setString(_kActive, _activeId);
     await prefs.setString(_kSubscriptionUrl, _subscriptionUrl);
     await prefs.setString(_kSubscriptions, jsonEncode(_subscriptions));
+    await prefs.setInt(_kChangedAt, _changedAt);
+  }
+
+  /// 导出音源数据用于 WebDAV 同步(音源代码、启用状态、排序、Cookie 配置、订阅)。
+  Map<String, dynamic> exportForSync() {
+    return {
+      'sources': _stored.map((e) => Map<String, dynamic>.from(e)).toList(),
+      'activeId': _activeId,
+      'subscriptionUrl': _subscriptionUrl,
+      'subscriptions': _subscriptions
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList(),
+    };
+  }
+
+  /// WebDAV 同步恢复:整体替换本地音源列表、排序、配置与订阅。
+  /// 恢复后所有音源在下次使用时重新注册到 JS 引擎。
+  Future<void> restoreFromCloudSync({
+    required List<Map<String, dynamic>> sources,
+    required String activeId,
+    required String subscriptionUrl,
+    required List<Map<String, dynamic>> subscriptions,
+    required int changedAt,
+  }) async {
+    if (!_ready) await init();
+    _stored
+      ..clear()
+      ..addAll(sources);
+    _subscriptions
+      ..clear()
+      ..addAll(subscriptions);
+    _activeId = activeId;
+    _subscriptionUrl = subscriptionUrl;
+    if (_activeId.isEmpty && _stored.isNotEmpty) {
+      _activeId = '${_stored.first['id']}';
+    }
+    // 音源代码整体替换,强制重新注册
+    _registered.clear();
+    await _persist();
+    if (changedAt > 0) {
+      _changedAt = changedAt;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_kChangedAt, changedAt);
+    }
+    LogService.instance.info(
+      'Source',
+      '已应用云端同步的音源数据',
+      detail: '音源数: ${_stored.length}\n订阅数: ${_subscriptions.length}',
+    );
   }
 
   bool _migrateLegacySubscriptionData() {

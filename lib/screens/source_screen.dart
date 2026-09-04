@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/cloud_auth_service.dart';
 import '../data/listening_stats_service.dart';
 import '../data/settings_service.dart';
+import '../data/webdav_sync_service.dart';
 import '../source/source_manager.dart';
 import 'alist_screen.dart';
 import 'background_protection_screen.dart';
@@ -119,6 +120,12 @@ class _SourceScreenState extends State<SourceScreen> {
                         ),
                       ),
                     ],
+                  ),
+
+                  // 数据同步
+                  AnimatedBuilder(
+                    animation: WebDavSyncService.instance,
+                    builder: (context, _) => _buildSyncSection(context),
                   ),
 
                   // 外观
@@ -422,6 +429,126 @@ class _SourceScreenState extends State<SourceScreen> {
   String _authorizationSubtitle(CloudAuthService auth) {
     final name = auth.license?.displayName.trim() ?? '';
     return name.isEmpty ? auth.stateLabel : '${auth.stateLabel} · $name';
+  }
+
+  Widget _buildSyncSection(BuildContext context) {
+    final sync = WebDavSyncService.instance;
+    final lastSyncText = sync.lastSyncAt == 0
+        ? '从未同步'
+        : '上次同步: ${DateTime.fromMillisecondsSinceEpoch(sync.lastSyncAt).toString().substring(0, 16)}';
+    final resultText = sync.lastResult.isEmpty ? '' : ' · ${sync.lastResult}';
+    return _buildSection(
+      title: '数据同步',
+      icon: Icons.sync_outlined,
+      children: [
+        if (!sync.webDavReady)
+          const ListTile(
+            leading: Icon(Icons.info_outline),
+            title: Text('请先配置 WebDAV'),
+            subtitle: Text('设置 → 网盘书库 → WebDAV 中添加账号'),
+          )
+        else ...[
+          ListTile(
+            leading: const Icon(Icons.sync_outlined),
+            title: const Text('自动同步'),
+            subtitle: Text(
+              sync.syncing ? '正在同步…' : '$lastSyncText$resultText',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            trailing: Switch(
+              value: sync.enabled,
+              onChanged: sync.hasPassword
+                  ? (value) => sync.setEnabled(value)
+                  : (value) => _showSyncPasswordDialog(
+                      context,
+                      requiredBeforeEnable: true,
+                    ),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.password_outlined),
+            title: const Text('同步密码'),
+            subtitle: Text(
+              sync.hasPassword ? '已设置(所有设备需一致)' : '未设置,加密上传前必须设置',
+            ),
+            trailing: const Icon(Icons.edit_outlined),
+            onTap: () => _showSyncPasswordDialog(context),
+          ),
+          ListTile(
+            leading: const Icon(Icons.sync_outlined),
+            title: const Text('立即同步'),
+            subtitle: const Text('拉取云端合并后再上传'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: sync.syncing ? null : () => sync.syncNow(),
+          ),
+          ListTile(
+            leading: const Icon(Icons.upload_outlined),
+            title: const Text('上传备份'),
+            subtitle: const Text('用本机数据覆盖云端'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: sync.syncing ? null : () => sync.uploadSnapshot(),
+          ),
+          ListTile(
+            leading: const Icon(Icons.download_outlined),
+            title: const Text('下载合并'),
+            subtitle: const Text('把云端数据合并到本机'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: sync.syncing ? null : () => sync.downloadAndMerge(),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _showSyncPasswordDialog(
+    BuildContext context, {
+    bool requiredBeforeEnable = false,
+  }) async {
+    final sync = WebDavSyncService.instance;
+    final controller = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('同步密码'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              '上传到 WebDAV 的数据(含音源 Cookie、配置)会用该密码加密。'
+              '所有需要同步的设备必须设置相同的密码。',
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              obscureText: true,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: '同步密码',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final password = controller.text.trim();
+    if (password.isEmpty) return;
+    await sync.setPassword(password);
+    if (requiredBeforeEnable) {
+      await sync.setEnabled(true);
+    }
   }
 }
 
