@@ -2,14 +2,15 @@
 // 接口:
 //   search        GET /search/result?keyword=&page=     → SSR HTML, 解析 .list-item
 //   discover      GET /api/payload + 分类加密接口       → XChaCha20-Poly1305 解密
-//   getChapters   GET /audios/{albumId}/1                → 解析章节页 __NUXT_DATA__（明文全量章节）
-//   getAudioUrl   返回 sniff 指令, App 用后台隐藏 WebView 加载播放页, 抓 file.hgeuz.cn/stream 直链
+//   getChapters   GET /albums/{id}                       → 解析 __NUXT_DATA__（明文全量 2115 章节）
+//   getAudioUrl   返回 sniff 指令, App 后台 WebView 加载 /albums/{id}/{idx} (SPA 自动播放),
+//                 抓 file.hgeuz.cn/stream 时效签名直链
 // 鉴权: 无 | 站点为 Nuxt SSR, 数据接口(album_chapters)是加密 payload, 故走页面解析 + 嗅探
 ({
-  name: '听优有声',
+  name: '听友FM',
   id: 'tingyou',
   apiVersion: 1,
-  _base: 'https://tingyou.fm',
+  _base: 'https://www.tingyou.fm',
   _payloadUrl: 'https://www.tingyou.fm/api/payload',
   _ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
   _payloadConfig: null,
@@ -254,10 +255,10 @@
     return { sections }
   },
 
-  // ── getChapters: bookId 即 albumId。请求任一章节页, 从 __NUXT_DATA__ 还原全量章节 ──
+  // ── getChapters: bookId 即 albumId。请求专辑页, 从 __NUXT_DATA__ 还原全量章节 ──
   async getChapters(bookId, page = 1, pageSize = 200) {
     pageSize = pageSize || 200
-    const html = await this._get('/audios/' + encodeURIComponent(bookId) + '/1')
+    const html = await this._get('/albums/' + encodeURIComponent(bookId))
     const arr = this._nuxtData(html)
 
     // devalue: 章节对象模板形如 { id, index, title, duration, creator_type, creator_id }
@@ -308,18 +309,19 @@
     }
   },
 
-  // ── getAudioUrl: chapterId = "albumId/index"。返回嗅探指令, 由 App 后台 WebView 抓时效签名直链 ──
+  // ── getAudioUrl: chapterId = "albumId/index"。返回嗅探指令, App 后台 WebView 打开
+  //                  /albums/{id}/{idx} (SPA 自动播放, 把 file.hgeuz.cn/stream 签名直链写入 <audio>)
   async getAudioUrl(chapterId) {
     if (!chapterId || String(chapterId).indexOf('/') < 0) {
       throw new Error('无效的 chapterId: ' + JSON.stringify(chapterId))
     }
-    const url = this._base + '/audios/' + String(chapterId)
+    const url = this._base + '/albums/' + String(chapterId)
     return {
       sniff: true,
       url,
       headers: { 'User-Agent': this._ua, Referer: this._base + '/' },
-      click: '.play-btn',                            // 播放页需点击“播放”触发音频请求
-      waitMs: 5000,
+      click: '',                                       // SPA 路由跳转后自动开始播放, 不需点击
+      waitMs: 4000,
       audioPatterns: ['file.hgeuz.cn/stream', '/stream/', '.mp3', '.m4a', '.aac', '.m3u8'],
     }
   },

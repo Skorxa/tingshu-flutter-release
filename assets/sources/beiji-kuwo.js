@@ -145,29 +145,93 @@
     }
   },
 
+  // 兜底解析：higequ 播放页（任意酷我 rid → let code Base64 直链）
+  async _resolveViaHigequ(rid) {
+    const html = await new Promise((resolve, reject) => {
+      uni.request({
+        url: 'https://higequ.com/player/' + rid + '/',
+        header: { 'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36', Referer: 'https://higequ.com/' },
+        timeout: 15000,
+        success: r => resolve(String(r.data || '')),
+        fail: e => reject(new Error(e.errMsg || '网络失败'))
+      })
+    })
+    const m = html.match(/let code = "([A-Za-z0-9+/=]+)"/)
+    if (!m) throw new Error('higequ 无音频数据')
+    const url = atob(m[1])
+    if (!/^https?:\/\//i.test(url)) throw new Error('higequ 直链无效')
+    return url
+  },
+
+  // 终极兜底：LX 社区解析 API（聆澜 GET → ikun POST），按 kw 平台解析任意酷我 rid
+  async _resolveViaLx(rid) {
+    const lxUa = 'lx-music-request/2.0.0'
+    try {
+      const r1 = await new Promise((resolve, reject) => {
+        uni.request({
+          url: 'https://source.shiqianjiang.cn/api/music/url?source=kw&songId=' + rid + '&quality=128k',
+          header: { 'User-Agent': lxUa, 'X-API-Key': 'CERU_KEY-31C0DB0B-2DFF-42EF-A2DB-47863E658840' },
+          timeout: 15000,
+          success: r => resolve(r.data),
+          fail: e => reject(new Error(e.errMsg || '网络失败'))
+        })
+      })
+      if (r1 && r1.code === 200 && /^https?:\/\//i.test(r1.url || '')) return r1.url
+    } catch (e) {}
+    try {
+      const r2 = await new Promise((resolve, reject) => {
+        uni.request({
+          url: 'https://c.wwwweb.top/music/url',
+          method: 'POST',
+          header: { 'Content-Type': 'application/json', 'User-Agent': lxUa, 'X-Api-Key': 'IKM-P18200001-AyKQrBcgmEyPDpRy-0t' },
+          data: { source: 'kw', musicId: rid, quality: '128k' },
+          timeout: 15000,
+          success: r => resolve(r.data),
+          fail: e => reject(new Error(e.errMsg || '网络失败'))
+        })
+      })
+      if (r2 && r2.code === 200 && /^https?:\/\//i.test(r2.url || '')) return r2.url
+    } catch (e) {}
+    throw new Error('LX 解析通道均不可用')
+  },
+
   async getAudioUrl(chapterId) {
     const rid = String(chapterId).replace(/^MUSIC_/i, '')
-    const res = await this._get('http://mobi.kuwo.cn/mobi.s', {
-      f: 'web', user: '0',
-      source: 'kwplayer_ar_8.5.5.0_apk_keluze.apk',
-      type: 'convert_url_with_sign', rid
-    })
-    const d = (res && res.data) ? res.data : res
-    if (d && d.url && String(d.url).startsWith('http')) {
-      return String(d.url).replace(/\$(?=\S)/g, '=')
-    }
-    const p2p = d && d.p2p_audiosourceid
-    if (p2p) {
-      const m = String(p2p).match(/^(\d+?)(\d{4})trackmedialongM(\w+?)(mp3|m4a|flac)$/)
-      if (m) {
-        const [, hash, code, fname, ext] = m
-        const bitrate = (d && d.bitrate) || 128
-        return `http://car-er.kuwo.cn/${hash}/resource/3${code}/trackmedia/long/M${fname}.${ext}?bitrate=${bitrate}&format=${ext}&user=0`
+    let primaryErr = null
+    try {
+      const res = await this._get('http://mobi.kuwo.cn/mobi.s', {
+        f: 'web', user: '0',
+        source: 'kwplayer_ar_8.5.5.0_apk_keluze.apk',
+        type: 'convert_url_with_sign', rid
+      })
+      const d = (res && res.data) ? res.data : res
+      if (d && d.url && String(d.url).startsWith('http')) {
+        return String(d.url).replace(/\$(?=\S)/g, '=')
       }
+      const p2p = d && d.p2p_audiosourceid
+      if (p2p) {
+        const m = String(p2p).match(/^(\d+?)(\d{4})trackmedialongM(\w+?)(mp3|m4a|flac)$/)
+        if (m) {
+          const [, hash, code, fname, ext] = m
+          const bitrate = (d && d.bitrate) || 128
+          return `http://car-er.kuwo.cn/${hash}/resource/3${code}/trackmedia/long/M${fname}.${ext}?bitrate=${bitrate}&format=${ext}&user=0`
+        }
+      }
+      if (typeof res === 'string' && res.trim().startsWith('http')) {
+        return res.trim().replace(/\$(?=\S)/g, '=')
+      }
+      primaryErr = new Error('无法解析音频链接，p2p=' + p2p + ' res=' + JSON.stringify(res).slice(0, 100))
+    } catch (e) {
+      primaryErr = e
     }
-    if (typeof res === 'string' && res.trim().startsWith('http')) {
-      return res.trim().replace(/\$(?=\S)/g, '=')
-    }
-    throw new Error('无法解析音频链接，p2p=' + p2p + ' res=' + JSON.stringify(res).slice(0, 100))
+    // 酷我官方通道失败 → higequ 播放页兜底
+    try {
+      return await this._resolveViaHigequ(rid)
+    } catch (e2) {}
+    // 再失败 → LX 社区 API 兜底
+    try {
+      return await this._resolveViaLx(rid)
+    } catch (e3) {}
+    throw primaryErr || new Error('无法解析音频链接')
   }
 })
