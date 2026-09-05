@@ -258,18 +258,6 @@ class _SourceScreenState extends State<SourceScreen> {
                         value: settings.androidAudioOffload,
                         onChanged: settings.setAndroidAudioOffload,
                       ),
-                      const Divider(height: 1, indent: 56),
-                      ListTile(
-                        leading: const Icon(Icons.filter_alt_outlined),
-                        title: const Text('目录净化规则'),
-                        subtitle: Text(
-                          settings.catalogFilterRules.trim().isEmpty
-                              ? '未设置 · 按关键字或正则隐藏杂乱章节'
-                              : '已启用 ${settings.catalogFilterRules.trim().split('\n').where((l) => l.trim().isNotEmpty).length} 条规则',
-                        ),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => _editCatalogFilterRules(settings),
-                      ),
                     ],
                   ),
 
@@ -468,55 +456,6 @@ class _SourceScreenState extends State<SourceScreen> {
       subtitle: Text(subtitle),
       trailing: Switch(value: value, onChanged: onChanged),
     );
-  }
-
-  Future<void> _editCatalogFilterRules(SettingsService settings) async {
-    final controller = TextEditingController(text: settings.catalogFilterRules);
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('目录净化规则'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('一行一条，命中规则的章节将从目录中隐藏。', style: TextStyle(fontSize: 13)),
-            const Text(
-              '普通文本按关键字匹配；/…/ 包裹按正则匹配。仅影响目录显示，播放和缓存不受影响。',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: controller,
-              maxLines: 6,
-              autofocus: true,
-              decoration: const InputDecoration(
-                hintText: '例如：\n求订阅\n/\\(\\d+\\)/',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('保存'),
-          ),
-        ],
-      ),
-    );
-    if (saved == true) {
-      await settings.setCatalogFilterRules(controller.text);
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('目录净化规则已保存')));
-    }
-    controller.dispose();
   }
 
   String _authorizationSubtitle(CloudAuthService auth) {

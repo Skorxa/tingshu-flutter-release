@@ -10,7 +10,6 @@ import '../data/catalog_cache_service.dart';
 import '../data/catalog_filter.dart';
 import '../data/log_service.dart';
 import '../data/quark_pan_service.dart';
-import '../data/settings_service.dart';
 import '../data/webdav_service.dart';
 import '../player/player_service.dart';
 import '../source/models.dart';
@@ -47,9 +46,9 @@ class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
   int _focusRetryCount = 0;
   int _cacheVersion = -1;
   String? _error;
-  // 目录净化:解析结果按规则文本缓存,列表渲染使用过滤后的可见子集
+  // 目录净化:按书存储(播放器目录页 AppBar 编辑),列表渲染使用过滤后的可见子集
+  String _filterRules = '';
   CatalogFilter? _filter;
-  String _filterRulesCache = '';
   List<Chapter> _visible = const [];
 
   @override
@@ -87,10 +86,8 @@ class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
   }
 
   List<Chapter> _visibleChapters() {
-    final rules = SettingsService.instance.catalogFilterRules;
-    if (_filter == null || _filterRulesCache != rules) {
-      _filterRulesCache = rules;
-      _filter = CatalogFilter.parse(rules);
+    if (_filter == null || _filter!.rulesText != _filterRules) {
+      _filter = CatalogFilter.parse(_filterRules);
     }
     final filter = _filter!;
     if (filter.isEmpty) return _chapters;
@@ -143,6 +140,14 @@ class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
     _bookId = player.bookId;
     _bookTitle = player.bookTitle;
     _cover = player.cover;
+    // 本书净化规则异步加载,加载完成后刷新可见列表
+    if (_sourceId.isNotEmpty && _bookId.isNotEmpty) {
+      _filterRules = await CatalogCacheService.instance.filterRules(
+        sourceId: _sourceId,
+        bookId: _bookId,
+      );
+      _filter = null;
+    }
 
     // 播放器内存中的目录可以立即显示，也一定包含当前正在播放的章节。
     // SQLite 目录随后合并，避免进入页面时先等待整本目录读取。
@@ -748,12 +753,94 @@ class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  /// 编辑本书的目录净化规则(按书生效,存于 catalog_filters 表)。
+  Future<void> _editFilterRules() async {
+    final controller = TextEditingController(text: _filterRules);
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('目录净化（本书）'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '只对这本书生效，一行一条。普通文本按关键字匹配；/…/ 包裹按正则匹配。命中章节从目录中隐藏，播放与缓存不受影响。',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: controller,
+              maxLines: 6,
+              autofocus: true,
+              decoration: const InputDecoration(
+                hintText: '例如：\n求订阅\n/\\(\\d+\\)/',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    final rules = controller.text;
+    controller.dispose();
+    if (saved != true) return;
+    await CatalogCacheService.instance.setFilterRules(
+      sourceId: _sourceId,
+      bookId: _bookId,
+      rules: rules,
+    );
+    if (!mounted) return;
+    setState(() {
+      _filterRules = rules;
+      _filter = null;
+    });
+    _toast('已保存本书净化规则');
+  }
+
   @override
   Widget build(BuildContext context) {
     final player = PlayerService.instance;
     final cs = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(title: const Text('播放目录')),
+      appBar: AppBar(
+        title: const Text('播放目录'),
+        actions: [
+          IconButton(
+            icon: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                const Icon(Icons.filter_alt_outlined),
+                if (_filterRules.trim().isNotEmpty)
+                  Positioned(
+                    right: -2,
+                    top: -2,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: cs.primary,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            tooltip: '目录净化（本书）',
+            onPressed: _editFilterRules,
+          ),
+        ],
+      ),
       bottomNavigationBar: SafeArea(
         top: false,
         child: Padding(

@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import '../data/catalog_cache_service.dart';
 import '../data/catalog_filter.dart';
 import '../data/progress_service.dart';
-import '../data/settings_service.dart';
 import '../data/shelf_service.dart';
 import '../player/player_service.dart';
 import '../source/models.dart';
@@ -37,7 +36,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _headerKey = GlobalKey();
   CatalogFilter? _filter;
-  String _filterRulesCache = '';
+  String _filterRules = '';
   List<Chapter> _visible = const [];
   late final String _sourceId;
   CatalogInfo? _info;
@@ -50,12 +49,10 @@ class _CatalogScreenState extends State<CatalogScreen> {
   bool _resumed = false;
   String? _error;
 
-  /// 目录净化后的可见章节(渲染层过滤,播放/缓存不受影响)。
+  /// 目录净化后的可见章节(按书规则,渲染层过滤,播放/缓存不受影响)。
   List<Chapter> _visibleChapters() {
-    final rules = SettingsService.instance.catalogFilterRules;
-    if (_filter == null || _filterRulesCache != rules) {
-      _filterRulesCache = rules;
-      _filter = CatalogFilter.parse(rules);
+    if (_filter == null || _filter!.rulesText != _filterRules) {
+      _filter = CatalogFilter.parse(_filterRules);
     }
     final filter = _filter!;
     if (filter.isEmpty) return _list;
@@ -121,6 +118,13 @@ class _CatalogScreenState extends State<CatalogScreen> {
   Future<void> _initCatalog() async {
     if (_sourceId.isNotEmpty && SourceManager.instance.activeId != _sourceId) {
       await SourceManager.instance.setActive(_sourceId);
+    }
+    if (!mounted) return;
+    if (_sourceId.isNotEmpty) {
+      _filterRules = await CatalogCacheService.instance.filterRules(
+        sourceId: _sourceId,
+        bookId: widget.book.bookId,
+      );
     }
     if (!mounted) return;
     await _restoreCachedCatalog();

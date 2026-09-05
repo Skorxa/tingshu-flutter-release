@@ -82,6 +82,46 @@ class CatalogCacheService {
     );
   }
 
+  /// 读取某本书的目录净化规则(空字符串表示未设置)。
+  Future<String> filterRules({
+    required String sourceId,
+    required String bookId,
+  }) async {
+    final db = await getDb();
+    final rows = await db.query(
+      'catalog_filters',
+      where: 'sourceId = ? AND bookId = ?',
+      whereArgs: [sourceId, bookId],
+      limit: 1,
+    );
+    return rows.isEmpty ? '' : '${rows.first['rules'] ?? ''}';
+  }
+
+  /// 保存某本书的目录净化规则(在播放器目录页编辑,按书生效)。
+  Future<void> setFilterRules({
+    required String sourceId,
+    required String bookId,
+    required String rules,
+  }) async {
+    final db = await getDb();
+    await db.insert(
+      'catalog_filters',
+      {
+        'sourceId': sourceId,
+        'bookId': bookId,
+        'rules': rules,
+        'updatedAt': DateTime.now().millisecondsSinceEpoch,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    LogService.instance.info(
+      'CatalogCache',
+      '目录净化规则已保存',
+      detail:
+          'BookID: $bookId\n音源: $sourceId\n规则行数: ${rules.split('\n').where((line) => line.trim().isNotEmpty).length}',
+    );
+  }
+
   Future<CachedCatalog?> load({
     required String sourceId,
     required String bookId,

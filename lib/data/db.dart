@@ -51,6 +51,17 @@ Future<void> _ensureShelfTrackingColumns(Database db) async {
   }
 }
 
+/// 目录净化规则(v9):按书存储,在播放器目录页编辑。
+Future<void> _createCatalogFiltersTable(Database db) async {
+  await db.execute('''CREATE TABLE IF NOT EXISTS catalog_filters (
+    sourceId TEXT,
+    bookId TEXT,
+    rules TEXT,
+    updatedAt INTEGER,
+    PRIMARY KEY(sourceId, bookId)
+  )''');
+}
+
 Future<void> _createCacheTable(
   Database db, {
   String table = 'cache_files',
@@ -176,13 +187,14 @@ Future<Database> getDb() async {
   final dir = await getDatabasesPath();
   _db = await openDatabase(
     join(dir, 'tingshu.db'),
-    version: 8,
+    version: 9,
     onCreate: (db, _) async {
       await _createProgressTable(db);
       await _createShelfTable(db);
       await _createCacheTable(db);
       await _createCatalogTables(db);
       await _createCacheStateTable(db);
+      await _createCatalogFiltersTable(db);
       await _createIndexes(db);
     },
     onUpgrade: (db, oldVersion, newVersion) async {
@@ -206,11 +218,15 @@ Future<Database> getDb() async {
       if (oldVersion < 8) {
         await _ensureShelfTrackingColumns(db);
       }
+      if (oldVersion < 9) {
+        await _createCatalogFiltersTable(db);
+      }
     },
     onOpen: (db) async {
       await _createCacheStateTable(db);
       await _createIndexes(db);
       await _ensureShelfTrackingColumns(db);
+      await _createCatalogFiltersTable(db);
     },
   );
   return _db!;

@@ -5,11 +5,14 @@
 /// - 其余按子串匹配。
 /// 仅作用于目录**显示层**,播放/缓存顺序不受影响。
 class CatalogFilter {
-  CatalogFilter._(this._patterns);
+  CatalogFilter._(this._patterns, this.rulesText);
 
   final List<Pattern> _patterns;
 
-  static final CatalogFilter empty = CatalogFilter._(const []);
+  /// 生成本实例的规则原文,调用方用于检测规则是否变化。
+  final String rulesText;
+
+  static final CatalogFilter empty = CatalogFilter._(const [], '');
 
   bool get isEmpty => _patterns.isEmpty;
 
@@ -29,7 +32,7 @@ class CatalogFilter {
         patterns.add(line);
       }
     }
-    return CatalogFilter._(patterns);
+    return CatalogFilter._(patterns, rules);
   }
 
   /// 章节名是否命中任一规则(应被隐藏)。
