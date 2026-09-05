@@ -2,6 +2,7 @@
 ({
   name: '博看有声',
   id: 'eprendre-bokan-yousheng',
+  version: 1,
   apiVersion: 1,
   _instanceId: '25304',
 

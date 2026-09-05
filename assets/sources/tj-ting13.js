@@ -9,6 +9,7 @@
 //       429/503 按 Retry-After 或指数退避重试；播放直链带 5 分钟 TTL 缓存去重。
 ({
   id: 'tingshu-json-ting13',
+  version: 1,
   name: '13听书网',
   apiVersion: 1,
 

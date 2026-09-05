@@ -1,6 +1,7 @@
 // Converted from docs/shareBookSource-2.json: 爱书音
 ({
   id: 'legado-aishuyin',
+  version: 1,
   name: '爱书音',
   apiVersion: 1,
   _ua: 'Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 Chrome/124.0 Mobile Safari/537.36',

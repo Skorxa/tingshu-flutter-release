@@ -1,22 +1,29 @@
-// 听优有声（tingyou.fm）HTML + 嗅探源
-// 接口:
-//   search        GET /search/result?keyword=&page=     → SSR HTML, 解析 .list-item
-//   discover      GET /api/payload + 分类加密接口       → XChaCha20-Poly1305 解密
-//   getChapters   GET /albums/{id}                       → 解析 __NUXT_DATA__（明文全量 2115 章节）
-//   getAudioUrl   返回 sniff 指令, App 后台 WebView 加载 /albums/{id}/{idx} (SPA 自动播放),
-//                 抓 file.hgeuz.cn/stream 时效签名直链
-// 鉴权: 无 | 站点为 Nuxt SSR, 数据接口(album_chapters)是加密 payload, 故走页面解析 + 嗅探
+// 听友FM（tingyou.fm）直连版
+// 搜索:     GET /search/result?keyword=&page=          → SSR HTML 解析 .list-item
+// 发现页:   json 镜像分类接口（XChaCha20-Poly1305 解密）
+// 目录:     json 镜像 album_info/{id} + album_chapters/{id}（解密）→ NUXT HTML 解析兜底
+// 音频直连: POST /api/play_token（AES-256-GCM 加密请求体 + Bearer 令牌）→ 解密响应取 play_url
+//   令牌:   POST /api/guest（加密空对象）→ auth_token（Fernet）
+//   设备:   dfp Cookie = f-{base36(YYYYMMDD)}:f-{base64(SM4-ECB(指纹串, sha256('fa317cd29b|日期')前16字节))}
+//   回退:   直连失败时返回嗅探指令（旧方案, App WebView 打开 /audios/{id}/{idx} 抓流）
+// 请求/响应加密均为 hex 信封: 版本字节(1B=01/02) + IV/nonce + 密文; 版本2 时密文字节对反转;
+// 请求用 AES-GCM（uni.crypto.aesGcmEncrypt 返回 IV||密文||TAG）, 响应用 XChaCha20-Poly1305
 ({
   name: '听友FM',
   id: 'tingyou',
+  version: 2,
   apiVersion: 1,
   _base: 'https://www.tingyou.fm',
+  _ua: 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Mobile Safari/537.36',
   _payloadUrl: 'https://www.tingyou.fm/api/payload',
-  _ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
   _payloadConfig: null,
   _payloadConfigAt: 0,
+  _dfp: '', _dfpDay: '',
+  _auth: '', _authAt: 0,
+  _cookies: {},
+  _audioCache: {},
 
-  // ── 公共 GET, 统一判状态码, 返回 HTML 文本 ──
+  // ── 公共 GET（HTML/明文 JSON）──
   _get(path) {
     const url = this._base + path
     return new Promise((resolve, reject) => {
@@ -56,6 +63,7 @@
     })
   },
 
+  // ── 动态密钥与镜像线路 ──
   async _getPayloadConfig(force = false) {
     const now = Date.now()
     if (!force && this._payloadConfig && now - this._payloadConfigAt < 5 * 60 * 1000) {
@@ -79,7 +87,7 @@
     const envelope = data && typeof data === 'object' ? data.payload : ''
     const raw = String(envelope || '').replace(/^0x/i, '').trim()
     if (!/^[0-9a-f]+$/i.test(raw) || raw.length < 2 + 48 + 32 || raw.length % 2 !== 0) {
-      throw new Error('分类接口返回了无效的加密 payload')
+      throw new Error('接口返回了无效的加密 payload')
     }
     const version = parseInt(raw.slice(0, 2), 16)
     const nonce = raw.slice(2, 50)
@@ -97,7 +105,7 @@
     try {
       return JSON.parse(plainText)
     } catch (_) {
-      throw new Error('分类 payload 解密成功但内容不是 JSON')
+      throw new Error('payload 解密成功但内容不是 JSON')
     }
   },
 
@@ -111,7 +119,7 @@
         errors.push(String(e && e.message || e))
       }
     }
-    throw new Error('分类主备线路均失败: ' + errors.join('；').slice(0, 300))
+    throw new Error('镜像线路均失败: ' + errors.join('；').slice(0, 300))
   },
 
   _findBookRows(value, depth = 0) {
@@ -198,7 +206,7 @@
     pageSize = pageSize || 20
     const html = await this._get('/search/result?keyword=' + encodeURIComponent(keyword) + '&page=' + page)
     const list = []
-    // 每个结果: <a href="/albums/{id}" class="list-item" ...> ... <p class="title">..</p> <p class="desc">..</p> <span class="text">N 期</span> </a>
+    // 每个结果: <a href="/albums/{id}" class="list-item"> ... <p class="title"> <p class="desc"> <span class="text">N 期
     const re = /<a\s+href="\/albums\/(\d+)"[^>]*class="list-item"[^>]*>([\s\S]*?)<\/a>/g
     let m
     while ((m = re.exec(html)) !== null) {
@@ -212,12 +220,11 @@
       list.push({
         bookId,
         title,
-        cover: '',                                   // 列表页封面为懒加载, 无 src; 进目录后由 getChapters 补
+        cover: '',
         author: '',
         intro: [count, desc].filter(Boolean).join(' · '),
       })
     }
-    // 搜不到返回空 list, 不抛错
     return { list: list.slice(0, pageSize), page, maxPage: 1, hasMore: false }
   },
 
@@ -255,14 +262,54 @@
     return { sections }
   },
 
-  // ── getChapters: bookId 即 albumId。请求专辑页, 从 __NUXT_DATA__ 还原全量章节 ──
+  // ── getChapters: 镜像接口（解密）为主, NUXT 页面解析兜底 ──
   async getChapters(bookId, page = 1, pageSize = 200) {
     pageSize = pageSize || 200
+    const p = Math.max(1, Number(page) || 1)
+    try {
+      const config = await this._getPayloadConfig()
+      const info = await this._loadEncrypted('/album_info/' + encodeURIComponent(bookId), config)
+      const ch = await this._loadEncrypted('/album_chapters/' + encodeURIComponent(bookId), config)
+      const rows = Array.isArray(ch && ch.chapters) ? ch.chapters : []
+      const all = rows
+        .map(x => ({ index: Number(x.index) || 0, name: String(x.title || '').trim() }))
+        .filter(x => x.name)
+        .sort((a, b) => a.index - b.index)
+      if (!all.length) throw new Error('章节列表为空')
+      const author = String(info.author || '').trim()
+      const teller = String(info.teller || '').trim()
+      const result = {
+        info: {
+          title: String(info.title || ''),
+          cover: String(info.cover_url || info.cover || ''),
+          author: author || teller,
+          trackCount: Number(info.count) || all.length,
+          isFinished: Number(info.status) === 1,
+        },
+        list: [],
+        page: p, maxPage: 1, hasMore: false,
+      }
+      const maxPage = Math.max(1, Math.ceil(all.length / pageSize))
+      const safePage = Math.max(1, Math.min(p, maxPage))
+      const start = (safePage - 1) * pageSize
+      result.list = all.slice(start, start + pageSize).map(x => ({
+        chapterId: bookId + '/' + x.index,
+        index: x.index,
+        name: x.name,
+      }))
+      result.page = safePage
+      result.maxPage = maxPage
+      result.hasMore = safePage < maxPage
+      return result
+    } catch (e) {
+      return this._chaptersViaNuxt(bookId, p, pageSize)
+    }
+  },
+
+  // NUXT 页面解析兜底（镜像失效时走这里）
+  async _chaptersViaNuxt(bookId, page, pageSize) {
     const html = await this._get('/albums/' + encodeURIComponent(bookId))
     const arr = this._nuxtData(html)
-
-    // devalue: 章节对象模板形如 { id, index, title, duration, creator_type, creator_id }
-    // 其 index/title 字段值是“指向 arr 的下标”, 需再解引用
     const all = []
     for (let i = 0; i < arr.length; i++) {
       const el = arr[i]
@@ -277,8 +324,6 @@
     }
     all.sort((a, b) => a.index - b.index)
     if (all.length === 0) throw new Error('章节列表为空（解析失败或专辑无章节）')
-
-    // 专辑信息: 对象模板含 { title, cover_url, count, author }
     const info = { title: '', cover: '', author: '', trackCount: all.length, isFinished: false }
     for (let i = 0; i < arr.length; i++) {
       const el = arr[i]
@@ -291,15 +336,13 @@
         break
       }
     }
-
     const maxPage = Math.max(1, Math.ceil(all.length / pageSize))
     const safePage = Math.max(1, Math.min(page, maxPage))
     const start = (safePage - 1) * pageSize
-    const slice = all.slice(start, start + pageSize)
     return {
       info,
-      list: slice.map(x => ({
-        chapterId: bookId + '/' + x.index,   // 编码 albumId/index, 供 getAudioUrl 拼播放页
+      list: all.slice(start, start + pageSize).map(x => ({
+        chapterId: bookId + '/' + x.index,
         index: x.index,
         name: x.name,
       })),
@@ -309,19 +352,150 @@
     }
   },
 
-  // ── getAudioUrl: chapterId = "albumId/index"。返回嗅探指令, App 后台 WebView 打开
-  //                  /albums/{id}/{idx} (SPA 自动播放, 把 file.hgeuz.cn/stream 签名直链写入 <audio>)
-  async getAudioUrl(chapterId) {
-    if (!chapterId || String(chapterId).indexOf('/') < 0) {
-      throw new Error('无效的 chapterId: ' + JSON.stringify(chapterId))
+  // ════════ 音频直连 ════════
+
+  _today() {
+    const d = new Date()
+    return '' + d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2)
+  },
+
+  // dfp 设备指纹 Cookie（SM4-ECB, 密钥随日期变化；服务端只验可解密性）
+  async _ensureDfp(keyHex) {
+    const day = this._today()
+    if (this._dfp && this._dfpDay === day) return this._dfp
+    const sha = await uni.crypto.sha256Hex({ text: 'fa317cd29b|' + day })
+    const fp = 'tyfm|' + this._ua + '|' + day
+    const enc = await uni.crypto.sm4EcbEncrypt({ plainText: fp, key: sha.slice(0, 32) })
+    this._dfp = 'f-' + parseInt(day, 10).toString(36) + ':f-' + encodeURIComponent(enc)
+    this._dfpDay = day
+    return this._dfp
+  },
+
+  _cookieHeader() {
+    const parts = []
+    if (this._dfp) parts.push('dfp=' + this._dfp)
+    for (const k in this._cookies) parts.push(k + '=' + this._cookies[k])
+    return parts.join('; ')
+  },
+
+  _captureCookies(header) {
+    if (!header) return
+    let raw = header['set-cookie'] || header['Set-Cookie'] || null
+    if (!raw) return
+    if (!Array.isArray(raw)) raw = [raw]
+    for (const c of raw) {
+      const kv = String(c).split(';')[0]
+      const eq = kv.indexOf('=')
+      if (eq > 0) this._cookies[kv.slice(0, eq).trim()] = kv.slice(eq + 1).trim()
     }
-    const url = this._base + '/albums/' + String(chapterId)
+  },
+
+  // 加密请求体: '01' + IV||密文||TAG(hex)
+  async _encBody(obj, keyHex) {
+    const inner = await uni.crypto.aesGcmEncrypt({
+      plainText: JSON.stringify(obj),
+      key: keyHex,
+      outputEncoding: 'hex',
+    })
+    return '01' + inner
+  },
+
+  async _apiPost(path, obj) {
+    const config = await this._getPayloadConfig()
+    await this._ensureDfp(config.key)
+    const body = await this._encBody(obj, config.key)
+    return new Promise((resolve, reject) => {
+      uni.request({
+        url: this._base + path,
+        method: 'POST',
+        header: {
+          'User-Agent': this._ua,
+          'Content-Type': 'text/plain',
+          'x-payload-version': '1',
+          Accept: 'application/json',
+          Origin: this._base,
+          Referer: this._base + '/',
+          Cookie: this._cookieHeader(),
+        },
+        data: body,
+        timeout: 15000,
+        success: r => {
+          this._captureCookies(r.header)
+          resolve({ statusCode: r.statusCode || 0, data: r.data })
+        },
+        fail: e => reject(new Error(e.errMsg || '网络失败')),
+      })
+    })
+  },
+
+  async _decryptResponse(res) {
+    let parsed = res.data
+    if (typeof parsed === 'string') {
+      try { parsed = JSON.parse(parsed) } catch (e) { throw new Error('响应不是 JSON: ' + String(parsed).slice(0, 80)) }
+    }
+    if (parsed && parsed.detail && !parsed.payload) return parsed   // 明文错误响应
+    return this._decryptPayload(parsed, this._payloadConfig.key)
+  },
+
+  async _guestLogin() {
+    const res = await this._apiPost('/api/guest', {})
+    if (res.statusCode !== 200) throw new Error('guest 接口 HTTP ' + res.statusCode)
+    const data = await this._decryptResponse(res)
+    if (!data || !data.auth_token) throw new Error('guest 未返回 auth_token')
+    this._auth = String(data.auth_token)
+    this._authAt = Date.now()
+    return this._auth
+  },
+
+  async _ensureAuth() {
+    if (this._auth && Date.now() - this._authAt < 10 * 60 * 1000) return this._auth
+    return this._guestLogin()
+  },
+
+  // getAudioUrl: chapterId = "albumId/index"
+  async getAudioUrl(chapterId) {
+    const s = String(chapterId || '')
+    const sep = s.indexOf('/')
+    if (sep < 1) throw new Error('无效的 chapterId: ' + JSON.stringify(chapterId))
+    const albumId = s.slice(0, sep)
+    const idx = s.slice(sep + 1)
+    const hit = this._audioCache[s]
+    if (hit && Date.now() - hit.at < 240000) return hit.value
+
+    // 直连：guest 令牌 → play_token → play_url
+    try {
+      await this._ensureAuth()
+      let res = await this._apiPost('/api/play_token', { album_id: Number(albumId), chapter_idx: Number(idx) || 1 })
+      if (res.statusCode === 401) {
+        // 令牌过期 → 重新登录一次
+        this._auth = ''
+        await this._guestLogin()
+        res = await this._apiPost('/api/play_token', { album_id: Number(albumId), chapter_idx: Number(idx) || 1 })
+      }
+      if (res.statusCode !== 200) throw new Error('play_token HTTP ' + res.statusCode)
+      const data = await this._decryptResponse(res)
+      const playUrl = data && data.play_url
+      if (!playUrl || !/^https?:\/\//i.test(playUrl)) {
+        throw new Error((data && data.detail) || 'play_url 为空')
+      }
+      const value = { url: playUrl, headers: { 'User-Agent': this._ua, Referer: this._base + '/' } }
+      this._audioCache[s] = { value, at: Date.now() }
+      return value
+    } catch (e) {
+      // 直连失败 → 回退嗅探（旧方案）
+      return this._sniffFallback(s)
+    }
+  },
+
+  _sniffFallback(chapterId) {
+    // 旧 App 无新加密桥时走这里。站点 SPA 较慢, 自动点击播放按钮( SSR 初始 HTML 即含 .play-btn )
+    // 并把等待拉长到 12s( 嗅探器每秒扫描一次, 总上限 20s 由 App 控制 )
     return {
       sniff: true,
-      url,
+      url: this._base + '/audios/' + String(chapterId),
       headers: { 'User-Agent': this._ua, Referer: this._base + '/' },
-      click: '',                                       // SPA 路由跳转后自动开始播放, 不需点击
-      waitMs: 4000,
+      click: '.play-btn',
+      waitMs: 12000,
       audioPatterns: ['file.hgeuz.cn/stream', '/stream/', '.mp3', '.m4a', '.aac', '.m3u8'],
     }
   },

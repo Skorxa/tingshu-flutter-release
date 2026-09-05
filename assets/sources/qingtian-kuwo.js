@@ -2,6 +2,7 @@
 ({
   name: '青天·酷我',
   id: 'qt-kuwo',
+  version: 1,
   apiVersion: 1,
   loginUrl: 'https://v1.gyks.cf/login',
   login: { url: 'https://v1.gyks.cf/login', configKey: 'qt_cookie' },

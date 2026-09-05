@@ -2,6 +2,7 @@
 ({
   name: '电台电视',
   id: 'eprendre-cnr',
+  version: 1,
   apiVersion: 1,
   _cover: 'https://wdts.top/api/covers/radio.jpg',
   _cctv: [

@@ -2,6 +2,7 @@
 ({
   name: '酷我畅听',
   id: 'eprendre-kuwo',
+  version: 1,
   apiVersion: 1,
   _ua: 'Mozilla/5.0 (Linux; Android) AppleWebKit/537.36',
   _audioSource: 'kwplayercar_ar_6.0.0.9_B_jiakong_vh.apk',

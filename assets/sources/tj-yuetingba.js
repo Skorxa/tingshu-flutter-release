@@ -2,6 +2,7 @@
 ({
   name: '悦听吧',
   id: 'tingshu-json-yuetingba',
+  version: 1,
   apiVersion: 1,
   _site: 'http://www.yuetingba.cn',
   _worker: 'https://audiocdn.966001.xyz',

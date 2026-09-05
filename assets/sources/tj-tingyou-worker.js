@@ -2,6 +2,7 @@
 ({
   name: '听友FM（Worker）',
   id: 'tingshu-json-tingyou',
+  version: 1,
   apiVersion: 1,
   _worker: 'https://audiocdn.966001.xyz',
   _pwd: 'admin123',

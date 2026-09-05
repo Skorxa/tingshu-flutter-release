@@ -5,6 +5,7 @@
 // - 懒人听书源（lrts$…#…）：站内自身即 404，无法播放
 ({
   id: 'tingshu-json-i275',
+  version: 1,
   name: '275听书网',
   apiVersion: 1,
   _site: 'https://m.i275.com',

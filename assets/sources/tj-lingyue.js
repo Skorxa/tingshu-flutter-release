@@ -4,6 +4,7 @@
 // 搜索接口返回曲目，按 albumid 聚合成书；目录为服务端分页
 ({
   id: 'tingshu-json-lingyue',
+  version: 1,
   name: '聆阅听书',
   apiVersion: 1,
   _bases: ['http://www.tingshu8.top', 'http://115.190.207.125'],

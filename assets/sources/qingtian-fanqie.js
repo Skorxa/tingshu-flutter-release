@@ -2,6 +2,7 @@
 ({
   name: '青天·番茄',
   id: 'qt-fanqie',
+  version: 1,
   apiVersion: 1,
   loginUrl: 'https://v1.gyks.cf/login',
   login: { url: 'https://v1.gyks.cf/login', configKey: 'qt_cookie' },

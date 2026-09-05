@@ -2,6 +2,7 @@
 ({
   name: '元气听书-喜马拉雅',
   id: 'tingshu-json-yuanqi-ximalaya',
+  version: 1,
   apiVersion: 1,
   _api: 'https://music.haitangw.cc/tingshu/tingshu.php',
   _ua: 'okhttp/4.9.2',

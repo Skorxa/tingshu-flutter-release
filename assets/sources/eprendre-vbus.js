@@ -2,6 +2,7 @@
 ({
   name: '声音巴士',
   id: 'eprendre-vbus',
+  version: 1,
   apiVersion: 1,
   _site: 'https://www.vbus.cc',
   _ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',

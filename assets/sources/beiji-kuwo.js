@@ -3,6 +3,7 @@
 ({
   name: '北极听书',
   id: 'beiji-kuwo',
+  version: 1,
   apiVersion: 1,
   _ua: 'okhttp/4.9.0',
   _albumMeta: {},

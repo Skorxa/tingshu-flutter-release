@@ -4,6 +4,7 @@
 // 姊妹站：inmp3.com / xingehui.com（同结构）
 ({
   id: 'tingshu-json-higequ',
+  version: 1,
   name: 'Hi歌曲音乐网',
   apiVersion: 1,
   _site: 'https://higequ.com',

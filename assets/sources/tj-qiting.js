@@ -2,6 +2,7 @@
 ({
   name: '奇听网',
   id: 'tingshu-json-qiting',
+  version: 1,
   apiVersion: 1,
   _site: 'https://www.qiting.cc',
   _ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',

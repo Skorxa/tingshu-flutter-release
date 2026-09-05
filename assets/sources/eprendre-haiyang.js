@@ -2,6 +2,7 @@
 ({
   name: '海洋听书网',
   id: 'eprendre-haiyang',
+  version: 1,
   apiVersion: 1,
   configFields: [
     { key: 'cookie', label: '海洋 Cookie', type: 'textarea', required: false }

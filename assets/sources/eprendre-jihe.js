@@ -2,6 +2,7 @@
 ({
   name: '机核 GCORES',
   id: 'eprendre-jihe',
+  version: 1,
   apiVersion: 1,
   _site: 'https://www.gcores.com',
   _ua: 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/124.0 Mobile Safari/537.36',

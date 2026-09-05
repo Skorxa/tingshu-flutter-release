@@ -2,6 +2,7 @@
 ({
   name: '经典老歌',
   id: 'eprendre-jdlg',
+  version: 1,
   apiVersion: 1,
   _site: 'http://www.jdlg.net',
   _ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',

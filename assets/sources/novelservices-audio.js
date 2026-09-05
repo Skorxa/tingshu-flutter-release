@@ -1,6 +1,7 @@
 // 账号凭据由 App 的音源“登录”配置注入，本文件不内置任何账号或 Token。
 ({
   id: 'novelservices-audio',
+  version: 1,
   name: '速听聚合',
   apiVersion: 1,
 

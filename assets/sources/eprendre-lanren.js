@@ -2,6 +2,7 @@
 ({
   name: '懒人听书',
   id: 'eprendre-lanren',
+  version: 1,
   apiVersion: 1,
   loginUrl: 'https://m.lrts.me/user',
   login: { url: 'https://m.lrts.me/user', configKey: 'cookie' },

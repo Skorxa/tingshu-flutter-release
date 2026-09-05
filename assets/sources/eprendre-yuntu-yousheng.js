@@ -2,6 +2,7 @@
 ({
   name: '云图有声',
   id: 'eprendre-yuntu-yousheng',
+  version: 1,
   apiVersion: 1,
   _wechatId: '07955551-706c-4259-9aa0-db4627dfca57',
 

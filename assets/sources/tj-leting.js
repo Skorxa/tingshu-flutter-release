@@ -9,6 +9,7 @@
 //       国内网络直连即得真实直链。登录为可选项（免费内容匿名即可播）。
 ({
   id: 'tingshu-json-leting',
+  version: 1,
   name: '乐听网',
   apiVersion: 1,
 

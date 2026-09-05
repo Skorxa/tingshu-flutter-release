@@ -5,6 +5,7 @@
 // 部分页面有 51 challenge，Cookie 名按解码脚本动态解析。
 ({
   id: 'tingshu-json-itingshu',
+  version: 1,
   name: '爱听书网',
   apiVersion: 1,
   login: { url: 'https://www.itingshu.net/user/public/login.html', configKey: 'cookie' },

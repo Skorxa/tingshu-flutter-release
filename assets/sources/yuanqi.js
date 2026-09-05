@@ -3,6 +3,7 @@
 ({
   name: '元气听书',
   id: 'yuanqi',
+  version: 1,
   apiVersion: 1,
   _api: 'https://music.haitangw.cc/tingshu/tingshu.php',
   _categoryApi: 'https://music.haitangw.cc/tingshu/category.php',

@@ -2,6 +2,7 @@
 ({
   name: '有声小说吧',
   id: 'eprendre-ysxs8',
+  version: 1,
   apiVersion: 1,
   configFields: [
     { key: 'cookie', label: '有声小说吧 Cookie', type: 'textarea', required: false }

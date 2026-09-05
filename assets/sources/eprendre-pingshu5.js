@@ -2,6 +2,7 @@
 ({
   name: '单田芳评书网',
   id: 'eprendre-pingshu5',
+  version: 1,
   apiVersion: 1,
   _site: 'http://www.pingshu5.net',
   _ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',

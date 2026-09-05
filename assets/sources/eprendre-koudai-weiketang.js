@@ -2,6 +2,7 @@
 ({
   name: '口袋微课堂',
   id: 'eprendre-koudai-weiketang',
+  version: 1,
   apiVersion: 1,
   _site: 'http://www.xiai123.com',
   _ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',

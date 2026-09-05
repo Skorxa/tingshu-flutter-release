@@ -3,6 +3,7 @@ var ガて=(function(){var ﾌォ=!![];return function(ヸぜ,ざト){var ｸザ
 
 return ({
   id: 'legado-fanqie-official',
+  version: 1,
   name: '番茄听书[官方]',
   apiVersion: 1,
   _ua: 'Mozilla/5.0 (Linux; Android 12; 23117RK66C Build/SKQ1.220303.001) AppleWebKit/537.36 Mobile Safari/537.36',
