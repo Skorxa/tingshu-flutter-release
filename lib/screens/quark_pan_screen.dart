@@ -191,6 +191,31 @@ class _QuarkPanScreenState extends State<QuarkPanScreen> {
   Future<void> _playBook() async {
     setState(() => _loading = true);
     try {
+      // 目录缓存优先:命中即秒开,不重新枚举网盘(章节为 quark: 占位,播放时解析直链)。
+      // 新增的文件在播放目录页点"刷新目录"后可见。
+      final cached = await CatalogCacheService.instance.load(
+        sourceId: 'quark',
+        bookId: _currentFid,
+      );
+      if (cached != null && cached.chapters.isNotEmpty) {
+        PlayerService.instance.setContext(
+          sourceId: 'quark',
+          bookId: _currentFid,
+          bookTitle: cached.info.title,
+          cover: cached.info.cover,
+          chapters: [
+            for (final ch in cached.chapters)
+              {'chapterId': ch.chapterId, 'index': ch.index, 'name': ch.name},
+          ],
+        );
+        await PlayerService.instance.playIndex(0);
+        if (!mounted) return;
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const PlayerScreen()),
+        );
+        return;
+      }
       final book = await _buildBook();
       if (book == null) return;
       await _cacheCatalog(book, _authorOf(book));

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:audio_service/audio_service.dart';
 
+import '../data/alist_service.dart';
 import '../data/baidu_pan_service.dart';
 import '../data/cache_service.dart';
 import '../data/catalog_cache_service.dart';
@@ -663,7 +664,9 @@ class PlayerService extends ChangeNotifier {
         : const <String, dynamic>{};
     final directUrl = '${currentChapter['audioUrl'] ?? ''}';
     final dynamicCloudUrl =
-        chapterId.startsWith('baidu:') || chapterId.startsWith('quark:');
+        chapterId.startsWith('baidu:') ||
+        chapterId.startsWith('quark:') ||
+        chapterId.startsWith('alist:');
     if (directUrl.isNotEmpty && !dynamicCloudUrl) {
       final headers = <String, String>{};
       final rawHeaders = currentChapter['audioHeaders'];
@@ -706,6 +709,24 @@ class PlayerService extends ChangeNotifier {
         'Player',
         '使用夸克网盘直链播放',
         detail: '章节: $chapterName\n重试: $attempt\nURL: ${audio.url}',
+      );
+      return AudioSource.uri(
+        Uri.parse(audio.url),
+        headers: audio.headers.isEmpty ? null : audio.headers,
+        tag: tag,
+      );
+    }
+
+    if (chapterId.startsWith('alist:')) {
+      // AList 懒解析:播放到哪集才调 /api/fs/get 拿新鲜直链,
+      // 避免打开书时逐集预解析造成大量串行请求触发 429。
+      final audio = await AlistService.instance.resolveAudio(
+        chapterId.substring('alist:'.length),
+      );
+      LogService.instance.info(
+        'Player',
+        '使用 Alist 直链播放',
+        detail: '章节: $chapterName\n重试: $attempt',
       );
       return AudioSource.uri(
         Uri.parse(audio.url),

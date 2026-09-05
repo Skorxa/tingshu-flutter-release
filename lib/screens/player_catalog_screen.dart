@@ -3,6 +3,8 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import '../data/alist_service.dart';
+import '../data/baidu_pan_service.dart';
 import '../data/cache_service.dart';
 import '../data/catalog_cache_service.dart';
 import '../data/log_service.dart';
@@ -295,6 +297,14 @@ class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
         await _refreshQuarkCatalog(bookId);
         return;
       }
+      if (sourceId == 'baidu') {
+        await _refreshBaiduCatalog(bookId);
+        return;
+      }
+      if (sourceId == 'alist') {
+        await _refreshAlistCatalog(bookId);
+        return;
+      }
       setState(() {
         _page = 1;
         _maxPage = 1;
@@ -339,6 +349,58 @@ class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('夸克目录已刷新，共 ${cached.chapters.length} 集')),
+    );
+  }
+
+  Future<void> _refreshBaiduCatalog(String bookId) async {
+    final cached = await BaiduPanService.instance.refreshCatalog(
+      bookPath: bookId,
+      fallbackCover: _cover.isNotEmpty ? _cover : (_info?.cover ?? ''),
+      fallbackAuthor: _info?.author ?? '',
+    );
+    if (!mounted) return;
+    setState(() {
+      _info = cached.info;
+      _chapters
+        ..clear()
+        ..addAll(cached.chapters);
+      _page = 1;
+      _maxPage = 1;
+      _hasMore = false;
+      _error = null;
+    });
+    _syncPlayerContext();
+    _focusCurrentChapter(force: true);
+    unawaited(_refreshCachedIds());
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('百度目录已刷新，共 ${cached.chapters.length} 集')),
+    );
+  }
+
+  Future<void> _refreshAlistCatalog(String bookId) async {
+    final cached = await AlistService.instance.refreshCatalog(
+      scopedBookPath: bookId,
+      fallbackCover: _cover.isNotEmpty ? _cover : (_info?.cover ?? ''),
+      fallbackAuthor: _info?.author ?? '',
+    );
+    if (!mounted) return;
+    setState(() {
+      _info = cached.info;
+      _chapters
+        ..clear()
+        ..addAll(cached.chapters);
+      _page = 1;
+      _maxPage = 1;
+      _hasMore = false;
+      _error = null;
+    });
+    _syncPlayerContext();
+    _focusCurrentChapter(force: true);
+    unawaited(_refreshCachedIds());
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Alist 目录已刷新，共 ${cached.chapters.length} 集')),
     );
   }
 

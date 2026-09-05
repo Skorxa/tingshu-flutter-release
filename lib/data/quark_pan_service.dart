@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -9,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import '../source/models.dart';
 import 'catalog_cache_service.dart';
 import 'log_service.dart';
+import 'pan_rate_limit.dart';
 import 'secure_store.dart';
 
 class QuarkPanItem {
@@ -110,6 +112,7 @@ class QuarkPanService extends ChangeNotifier {
   static const _coverExtensions = {'.jpg', '.jpeg', '.png', '.webp'};
 
   final Dio _dio = Dio();
+  final Random _random = Random();
   String _cookie = '';
 
   String get pcUserAgent => _pcUa;
@@ -195,7 +198,20 @@ class QuarkPanService extends ChangeNotifier {
     var page = 1;
     var hasMore = true;
     while (hasMore && page <= _maxAutoPages) {
-      final result = await listPage(fid, page: page);
+      QuarkPanPage result;
+      try {
+        result = await listPage(fid, page: page);
+      } on PanRateLimitException catch (e) {
+        if (page == 1) rethrow; // 首页被限流,多半整体被限,直接上抛
+        final wait = panBackoffDelayMs(_random);
+        LogService.instance.warning(
+          'QuarkPan',
+          '触发网盘限流，退避后重试',
+          detail: 'FID: $fid\n页码: $page\n等待: ${wait}ms\n${e.detail}',
+        );
+        await Future<void>.delayed(Duration(milliseconds: wait));
+        result = await listPage(fid, page: page);
+      }
       all.addAll(result.items);
       hasMore = result.hasMore;
       LogService.instance.info(
@@ -206,7 +222,8 @@ class QuarkPanService extends ChangeNotifier {
       );
       page++;
       if (hasMore) {
-        await Future<void>.delayed(const Duration(milliseconds: 250));
+        // 页间随机抖动,避免固定节奏被网盘风控识别
+        await Future<void>.delayed(Duration(milliseconds: 250 + _random.nextInt(400)));
       }
     }
     if (hasMore) {
@@ -251,6 +268,9 @@ class QuarkPanService extends ChangeNotifier {
         validateStatus: (_) => true,
       ),
     );
+    if (resp.statusCode == 429) {
+      throw PanRateLimitException('夸克目录请求被限流\nFID: $fid\n页码: $page');
+    }
     if ((resp.statusCode ?? 0) >= 400) {
       throw Exception('夸克目录请求失败 HTTP ${resp.statusCode}\nFID: $fid\n页码: $page');
     }
@@ -287,7 +307,8 @@ class QuarkPanService extends ChangeNotifier {
     final subs = items.where((e) => e.isDirectory).toList()
       ..sort((a, b) => _naturalCompare(a.name, b.name));
     for (final sub in subs) {
-      await Future<void>.delayed(const Duration(milliseconds: 300));
+      // 子目录间隔随机抖动,避免连续打接口被风控
+      await Future<void>.delayed(Duration(milliseconds: 300 + _random.nextInt(500)));
       await _collect(sub.fid, out, depth + 1);
     }
   }

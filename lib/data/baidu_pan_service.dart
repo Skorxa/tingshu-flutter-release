@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -7,7 +8,10 @@ import 'package:path/path.dart' as path_util;
 import 'package:path_provider/path_provider.dart';
 
 import 'log_service.dart';
+import 'pan_rate_limit.dart';
 import 'secure_store.dart';
+import '../source/models.dart';
+import 'catalog_cache_service.dart';
 
 class BaiduPanItem {
   final String name;
@@ -110,6 +114,7 @@ class BaiduPanService extends ChangeNotifier {
   static const _coverExtensions = {'.jpg', '.jpeg', '.png', '.webp'};
 
   final Dio _dio = Dio();
+  final Random _random = Random();
   String _cookie = '';
   String _rootPath = '/';
 
@@ -214,7 +219,20 @@ class BaiduPanService extends ChangeNotifier {
     var page = 1;
     var hasMore = true;
     while (hasMore && page <= _maxAutoPages) {
-      final result = await listPage(dir, page: page, pageSize: pageSize);
+      BaiduPanPage result;
+      try {
+        result = await listPage(dir, page: page, pageSize: pageSize);
+      } on PanRateLimitException catch (e) {
+        if (page == 1) rethrow; // 首页被限流,多半整体被限,直接上抛
+        final wait = panBackoffDelayMs(_random);
+        LogService.instance.warning(
+          'BaiduPan',
+          '触发网盘限流，退避后重试',
+          detail: '路径: $dir\n页码: $page\n等待: ${wait}ms\n${e.detail}',
+        );
+        await Future<void>.delayed(Duration(milliseconds: wait));
+        result = await listPage(dir, page: page, pageSize: pageSize);
+      }
       all.addAll(result.items);
       hasMore = result.hasMore;
       LogService.instance.info(
@@ -225,7 +243,8 @@ class BaiduPanService extends ChangeNotifier {
       );
       page++;
       if (hasMore) {
-        await Future<void>.delayed(const Duration(milliseconds: 250));
+        // 页间随机抖动,避免固定节奏被网盘风控识别
+        await Future<void>.delayed(Duration(milliseconds: 250 + _random.nextInt(400)));
       }
     }
     if (hasMore) {
@@ -265,6 +284,9 @@ class BaiduPanService extends ChangeNotifier {
         validateStatus: (_) => true,
       ),
     );
+    if (resp.statusCode == 429) {
+      throw PanRateLimitException('百度目录请求被限流\n路径: $dir\n页码: $page');
+    }
     final data = jsonDecode(resp.data ?? '{}') as Map<String, dynamic>;
     final errno = (data['errno'] as num?)?.toInt() ?? -1;
     if (errno != 0) throw Exception(_errnoMessage(errno));
@@ -309,8 +331,8 @@ class BaiduPanService extends ChangeNotifier {
     final subs = items.where((e) => e.isDirectory).toList()
       ..sort((a, b) => _naturalCompare(a.name, b.name));
     for (final sub in subs) {
-      // 子目录间隔一下,避免连续打接口被风控
-      await Future<void>.delayed(const Duration(milliseconds: 300));
+      // 子目录间隔随机抖动,避免连续打接口被风控
+      await Future<void>.delayed(Duration(milliseconds: 300 + _random.nextInt(500)));
       await _collect(sub.path, out, depth + 1);
     }
   }
@@ -329,6 +351,55 @@ class BaiduPanService extends ChangeNotifier {
       cover: cover,
       path: bookPath,
       audioFiles: audios,
+    );
+  }
+
+  /// 重新枚举目录并刷新缓存(手动刷新入口),返回最新目录供 UI 直接替换。
+  Future<CachedCatalog> refreshCatalog({
+    required String bookPath,
+    String fallbackCover = '',
+    String fallbackAuthor = '',
+  }) async {
+    final book = await toBook(bookPath);
+    if (book.audioFiles.isEmpty) throw Exception('目录没有可播放的音频文件');
+    final author = book.narrator.isEmpty
+        ? book.author
+        : '${book.author} / ${book.narrator}';
+    final info = CatalogInfo(
+      title: book.title,
+      cover: book.cover.isNotEmpty ? book.cover : fallbackCover,
+      author: author.isNotEmpty ? author : fallbackAuthor,
+      trackCount: book.audioFiles.length,
+      isFinished: true,
+    );
+    final chapters = <Chapter>[
+      for (var i = 0; i < book.audioFiles.length; i++)
+        Chapter(
+          chapterId: 'baidu:${book.audioFiles[i].path}',
+          index: i + 1,
+          name: book.audioFiles[i].name,
+        ),
+    ];
+    await CatalogCacheService.instance.savePage(
+      sourceId: 'baidu',
+      bookId: bookPath,
+      info: info,
+      chapters: chapters,
+      page: 1,
+      maxPage: 1,
+      hasMore: false,
+    );
+    LogService.instance.info(
+      'BaiduPan',
+      '书籍目录已刷新并写入 SQLite',
+      detail: '书名: ${info.title}\n路径: $bookPath\n章节数: ${chapters.length}',
+    );
+    return CachedCatalog(
+      info: info,
+      chapters: chapters,
+      page: 1,
+      maxPage: 1,
+      hasMore: false,
     );
   }
 

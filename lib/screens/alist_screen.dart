@@ -90,31 +90,16 @@ class _AlistScreenState extends State<AlistScreen> {
       _toast('当前目录没有可播放的音频文件');
       return;
     }
-    final chapters = <Map<String, dynamic>>[];
-    for (var i = 0; i < book.audioFiles.length; i++) {
-      final file = book.audioFiles[i];
-      final scopedPath = service.scopedPath(file.path);
-      try {
-        final audio = await service.resolveAudio(scopedPath);
-        chapters.add({
-          'chapterId': 'alist:$scopedPath',
+    // 章节只带 alist: 占位 chapterId,播放到哪集才解析哪集直链(懒解析),
+    // 不再逐集预解析导致大目录串行几百个请求触发 429。
+    final chapters = [
+      for (var i = 0; i < book.audioFiles.length; i++)
+        {
+          'chapterId': 'alist:${service.scopedPath(book.audioFiles[i].path)}',
           'index': i + 1,
-          'name': file.name,
-          'audioUrl': audio.url,
-          'audioHeaders': audio.headers,
-        });
-      } catch (e) {
-        LogService.instance.warning(
-          'Alist',
-          '解析章节直链失败，跳过',
-          detail: '文件: ${file.name}\n错误: $e',
-        );
-      }
-    }
-    if (chapters.isEmpty) {
-      _toast('无法解析任何音频直链');
-      return;
-    }
+          'name': book.audioFiles[i].name,
+        },
+    ];
     final scopedBookPath = service.scopedPath(book.path);
     PlayerService.instance.setContext(
       sourceId: 'alist',

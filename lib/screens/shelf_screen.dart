@@ -287,22 +287,8 @@ class _ShelfScreenState extends State<ShelfScreen>
       );
     }
 
-    final cover = await _ensureBaiduLocalCover(book, cached);
-    if (cover.isNotEmpty && cover != cached.info.cover) {
-      cached = CachedCatalog(
-        info: CatalogInfo(
-          title: cached.info.title,
-          cover: cover,
-          author: cached.info.author,
-          trackCount: cached.info.trackCount,
-          isFinished: cached.info.isFinished,
-        ),
-        chapters: cached.chapters,
-        page: cached.page,
-        maxPage: cached.maxPage,
-        hasMore: cached.hasMore,
-      );
-    }
+    // 封面本地化后台执行,不阻塞播放;结果更新书架/目录缓存,下次打开生效。
+    unawaited(_ensureBaiduLocalCover(book, cached));
 
     final progress = await ProgressService.instance.load(
       sourceId: 'baidu',
@@ -394,22 +380,8 @@ class _ShelfScreenState extends State<ShelfScreen>
       );
     }
 
-    final cover = await _ensureQuarkLocalCover(book, cached);
-    if (cover.isNotEmpty && cover != cached.info.cover) {
-      cached = CachedCatalog(
-        info: CatalogInfo(
-          title: cached.info.title,
-          cover: cover,
-          author: cached.info.author,
-          trackCount: cached.info.trackCount,
-          isFinished: cached.info.isFinished,
-        ),
-        chapters: cached.chapters,
-        page: cached.page,
-        maxPage: cached.maxPage,
-        hasMore: cached.hasMore,
-      );
-    }
+    // 封面本地化后台执行,不阻塞播放;结果更新书架/目录缓存,下次打开生效。
+    unawaited(_ensureQuarkLocalCover(book, cached));
 
     final progress = await ProgressService.instance.load(
       sourceId: 'quark',
@@ -544,75 +516,81 @@ class _ShelfScreenState extends State<ShelfScreen>
     if (!service.ready) throw Exception('请先配置 Alist');
     await service.activateForScopedPath(book.bookId);
     final rawPath = service.pathFromScopedPath(book.bookId);
-    final items = await service.list(rawPath);
-    final alistBook = service.toBook(rawPath, items);
-    if (alistBook.audioFiles.isEmpty) throw Exception('目录没有可播放的音频文件');
 
-    // 解析每集直链（/api/fs/get 拿 fresh sign），失败的章节跳过
-    final chapters = <Map<String, dynamic>>[];
-    for (var i = 0; i < alistBook.audioFiles.length; i++) {
-      final file = alistBook.audioFiles[i];
-      final scopedPath = service.scopedPath(file.path);
-      try {
-        final audio = await service.resolveAudio(scopedPath);
-        chapters.add({
-          'chapterId': 'alist:$scopedPath',
-          'index': i + 1,
-          'name': file.name,
-          'audioUrl': audio.url,
-          'audioHeaders': audio.headers,
-        });
-      } catch (e) {
-        LogService.instance.warning(
-          'Shelf',
-          'Alist 章节直链解析失败，跳过',
-          detail: '书名: ${book.title}\n文件: ${file.name}\n错误: $e',
-        );
-      }
-    }
-    if (chapters.isEmpty) throw Exception('无法解析任何音频直链，可能 token 失效');
-
-    // 补本地封面
-    final coverItem = service.findCoverItem(items);
+    // 目录缓存优先:章节 chapterId 自带 alist: 占位,播放时才解析直链,
+    // 因此缓存可以放心复用,秒开不发请求。未命中才枚举网盘(仅首开)。
+    List<Map<String, dynamic>> chapters;
     String cover = book.cover;
-    if (coverItem != null) {
-      try {
-        final localCover = await service.cacheCover(coverItem);
-        if (localCover.isNotEmpty) cover = localCover;
-      } catch (e) {
-        LogService.instance.warning(
-          'Shelf',
-          'Alist 本地封面补全失败，继续使用现有封面',
-          detail: '书名: ${book.title}\n错误: $e',
-        );
+    String title = book.title;
+    final cached = await CatalogCacheService.instance.load(
+      sourceId: 'alist',
+      bookId: book.bookId,
+    );
+    if (cached != null && cached.chapters.isNotEmpty) {
+      chapters = [
+        for (final ch in cached.chapters)
+          {'chapterId': ch.chapterId, 'index': ch.index, 'name': ch.name},
+      ];
+      if (cached.info.title.isNotEmpty) title = cached.info.title;
+      if (cached.info.cover.isNotEmpty) cover = cached.info.cover;
+      LogService.instance.info(
+        'Shelf',
+        'Alist 目录缓存命中，直接续播',
+        detail: '书名: ${book.title}\n章节数: ${chapters.length}',
+      );
+    } else {
+      final items = await service.list(rawPath);
+      final alistBook = service.toBook(rawPath, items);
+      if (alistBook.audioFiles.isEmpty) throw Exception('目录没有可播放的音频文件');
+      chapters = [
+        for (var i = 0; i < alistBook.audioFiles.length; i++)
+          {
+            'chapterId': 'alist:${service.scopedPath(alistBook.audioFiles[i].path)}',
+            'index': i + 1,
+            'name': alistBook.audioFiles[i].name,
+          },
+      ];
+      title = alistBook.title.isNotEmpty ? alistBook.title : book.title;
+      await CatalogCacheService.instance.savePage(
+        sourceId: 'alist',
+        bookId: service.scopedPath(alistBook.path),
+        info: CatalogInfo(
+          title: title,
+          cover: cover,
+          author: alistBook.narrator.isEmpty
+              ? alistBook.author
+              : '${alistBook.author} / ${alistBook.narrator}',
+          trackCount: chapters.length,
+          isFinished: true,
+        ),
+        chapters: [
+          for (final ch in chapters)
+            Chapter(
+              chapterId: '${ch['chapterId']}',
+              index: (ch['index'] as num).toInt(),
+              name: '${ch['name']}',
+            ),
+        ],
+        page: 1,
+        maxPage: 1,
+        hasMore: false,
+      );
+      // 封面缓存后台补齐,不阻塞播放
+      final coverItem = service.findCoverItem(items);
+      if (coverItem != null) {
+        unawaited(() async {
+          try {
+            await service.cacheCover(coverItem);
+          } catch (e) {
+            LogService.instance.warning(
+              'Shelf',
+              'Alist 封面后台缓存失败',
+              detail: '书名: ${book.title}\n错误: $e',
+            );
+          }
+        }());
       }
     }
-
-    // 缓存目录，下次进书架可直接播放
-    await CatalogCacheService.instance.savePage(
-      sourceId: 'alist',
-      bookId: service.scopedPath(alistBook.path),
-      info: CatalogInfo(
-        title: alistBook.title.isNotEmpty ? alistBook.title : book.title,
-        cover: cover,
-        author: alistBook.narrator.isEmpty
-            ? alistBook.author
-            : '${alistBook.author} / ${alistBook.narrator}',
-        trackCount: chapters.length,
-        isFinished: true,
-      ),
-      chapters: [
-        for (final ch in chapters)
-          Chapter(
-            chapterId: '${ch['chapterId']}',
-            index: (ch['index'] as num).toInt(),
-            name: '${ch['name']}',
-          ),
-      ],
-      page: 1,
-      maxPage: 1,
-      hasMore: false,
-    );
 
     final progress = await ProgressService.instance.load(
       sourceId: 'alist',
@@ -634,7 +612,7 @@ class _ShelfScreenState extends State<ShelfScreen>
     PlayerService.instance.setContext(
       sourceId: 'alist',
       bookId: book.bookId,
-      bookTitle: alistBook.title.isNotEmpty ? alistBook.title : book.title,
+      bookTitle: title,
       cover: cover,
       chapters: chapters,
     );

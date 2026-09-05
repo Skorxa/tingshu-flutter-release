@@ -8,8 +8,10 @@ import 'package:path/path.dart' as path_util;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../source/models.dart';
 import 'log_service.dart';
 import 'secure_store.dart';
+import 'catalog_cache_service.dart';
 
 /// Alist 账号配置：仅需一个根 URL，token 可选（guest 实例留空）。
 class AlistConfig {
@@ -418,6 +420,58 @@ class AlistService extends ChangeNotifier {
   bool isAudioFile(String name) {
     final lower = name.toLowerCase();
     return audioExtensions.any(lower.endsWith);
+  }
+
+  /// 重新枚举目录并刷新缓存(手动刷新入口),返回最新目录供 UI 直接替换。
+  Future<CachedCatalog> refreshCatalog({
+    required String scopedBookPath,
+    String fallbackCover = '',
+    String fallbackAuthor = '',
+  }) async {
+    await activateForScopedPath(scopedBookPath);
+    final rawPath = pathFromScopedPath(scopedBookPath);
+    final items = await list(rawPath);
+    final book = toBook(rawPath, items);
+    if (book.audioFiles.isEmpty) throw Exception('目录没有可播放的音频文件');
+    final author = book.narrator.isEmpty
+        ? book.author
+        : '${book.author} / ${book.narrator}';
+    final info = CatalogInfo(
+      title: book.title,
+      cover: book.cover.isNotEmpty ? book.cover : fallbackCover,
+      author: author.isNotEmpty ? author : fallbackAuthor,
+      trackCount: book.audioFiles.length,
+      isFinished: true,
+    );
+    final chapters = <Chapter>[
+      for (var i = 0; i < book.audioFiles.length; i++)
+        Chapter(
+          chapterId: 'alist:${scopedPath(book.audioFiles[i].path)}',
+          index: i + 1,
+          name: book.audioFiles[i].name,
+        ),
+    ];
+    await CatalogCacheService.instance.savePage(
+      sourceId: 'alist',
+      bookId: scopedBookPath,
+      info: info,
+      chapters: chapters,
+      page: 1,
+      maxPage: 1,
+      hasMore: false,
+    );
+    LogService.instance.info(
+      'Alist',
+      '书籍目录已刷新并写入 SQLite',
+      detail: '书名: ${info.title}\n路径: $rawPath\n章节数: ${chapters.length}',
+    );
+    return CachedCatalog(
+      info: info,
+      chapters: chapters,
+      page: 1,
+      maxPage: 1,
+      hasMore: false,
+    );
   }
 
   bool isCoverFile(String name) {
