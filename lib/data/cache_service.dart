@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -127,6 +128,7 @@ class CacheService extends ChangeNotifier {
   static final instance = CacheService._();
 
   final Dio _dio = Dio();
+  final Random _random = Random();
   Timer? _timer;
   Timer? _countdownTimer;
   bool _syncing = false;
@@ -689,6 +691,12 @@ class CacheService extends ChangeNotifier {
           continue;
         }
         var usedSniff = false;
+        // 夸克 CDN 对高频取链+下载组合敏感,章节间加随机抖动降低 412 概率
+        if (context.sourceId == 'quark') {
+          await Future<void>.delayed(
+            Duration(milliseconds: 300 + _random.nextInt(500)),
+          );
+        }
         try {
           await _downloadChapter(
             context,
@@ -737,6 +745,47 @@ class CacheService extends ChangeNotifier {
       _syncing = false;
       notifyListeners();
     }
+  }
+
+  /// 普通音频下载。夸克 CDN 的反盗链(412)针对请求头组合校验且规则由服务端
+  /// 控制,按变体逐级重试:0=完整头 → 1=去 Cookie/Origin → 2=仅 UA。
+  Future<Response> _downloadPlainAudio(
+    String url,
+    File tmp,
+    Map<String, String> headers,
+    String sourceId,
+  ) async {
+    final variants = sourceId == 'quark' ? [0, 1, 2] : const [0];
+    Object? lastError;
+    StackTrace? lastStack;
+    for (final variant in variants) {
+      try {
+        final variantHeaders = variant == 0
+            ? headers
+            : QuarkPanService.headerVariantHeaders(headers, variant);
+        return await _dio.download(
+          url,
+          tmp.path,
+          options: Options(
+            headers: variantHeaders.isEmpty ? null : variantHeaders,
+            receiveTimeout: const Duration(seconds: 30),
+          ),
+        );
+      } on DioException catch (e) {
+        lastError = e;
+        lastStack = StackTrace.current;
+        if (e.response?.statusCode != 412) rethrow;
+        LogService.instance.warning(
+          'Cache',
+          '夸克下载返回 412，切换请求头变体重试',
+          detail: '变体: $variant → ${variant + 1}\nURL: $url',
+        );
+      }
+    }
+    if (lastError is Error && lastStack != null) {
+      Error.throwWithStackTrace(lastError, lastStack);
+    }
+    throw lastError!;
   }
 
   Future<void> _downloadChapter(
@@ -825,13 +874,11 @@ class CacheService extends ChangeNotifier {
         );
       } else {
         try {
-          final response = await _dio.download(
+          final response = await _downloadPlainAudio(
             audioUrl,
-            tmp.path,
-            options: Options(
-              headers: audioHeaders.isEmpty ? null : audioHeaders,
-              receiveTimeout: const Duration(seconds: 30),
-            ),
+            tmp,
+            audioHeaders,
+            context.sourceId,
           );
           await _validateDownloadedAudio(tmp, response);
           if (file.existsSync()) file.deleteSync();

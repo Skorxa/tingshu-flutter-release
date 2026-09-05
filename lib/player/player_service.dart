@@ -710,6 +710,8 @@ class PlayerService extends ChangeNotifier {
     if (chapterId.startsWith('quark:')) {
       final audio = await QuarkPanService.instance.resolveAudio(
         chapterId.substring('quark:'.length),
+        // 夸克 CDN 反盗链 412 时换请求头变体重试(0=完整头 1=去 Cookie)
+        headerVariant: attempt > 1 ? attempt - 1 : 0,
       );
       LogService.instance.info(
         'Player',

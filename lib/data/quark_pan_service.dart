@@ -455,13 +455,14 @@ class QuarkPanService extends ChangeNotifier {
     return file.path;
   }
 
-  Future<QuarkAudio> resolveAudio(String fid) async {
-    return _resolveDownload(fid, playHeaders: true);
+  Future<QuarkAudio> resolveAudio(String fid, {int headerVariant = 0}) async {
+    return _resolveDownload(fid, playHeaders: true, headerVariant: headerVariant);
   }
 
   Future<QuarkAudio> _resolveDownload(
     String fid, {
     required bool playHeaders,
+    int headerVariant = 0,
   }) async {
     if (_cookie.isEmpty) throw Exception('请先登录夸克网盘');
     LogService.instance.info('QuarkPan', '请求下载直链', detail: 'FID: $fid');
@@ -492,7 +493,25 @@ class QuarkPanService extends ChangeNotifier {
       '取直链完成',
       detail: 'FID: $fid\nURL: $url',
     );
-    return QuarkAudio(url, playHeaders ? _playHeaders() : _headers());
+    return QuarkAudio(
+      url,
+      playHeaders ? headerVariantHeaders(_playHeaders(), headerVariant) : _headers(),
+    );
+  }
+
+  /// 夸克 CDN 反盗链(412)的请求头降级变体:
+  /// 0=UA+Cookie+Referer(默认) 1=去 Cookie/Origin 2=仅 UA。
+  /// WAF 规则由服务端控制且随时可能调整,调用方按 0→1→2 逐级重试。
+  static Map<String, String> headerVariantHeaders(
+    Map<String, String> headers,
+    int variant,
+  ) {
+    if (variant <= 0) return headers;
+    final out = {...headers}
+      ..remove('Cookie')
+      ..remove('Origin');
+    if (variant >= 2) out.remove('Referer');
+    return out;
   }
 
   Map<String, String> _headers() => {
