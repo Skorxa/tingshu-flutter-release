@@ -37,7 +37,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
   final GlobalKey _headerKey = GlobalKey();
   CatalogFilter? _filter;
   String _filterRules = '';
-  List<Chapter> _visible = const [];
   late final String _sourceId;
   CatalogInfo? _info;
   int _page = 1;
@@ -49,14 +48,11 @@ class _CatalogScreenState extends State<CatalogScreen> {
   bool _resumed = false;
   String? _error;
 
-  /// 目录净化后的可见章节(按书规则,渲染层过滤,播放/缓存不受影响)。
-  List<Chapter> _visibleChapters() {
+  String _chapterDisplayName(Chapter chapter) {
     if (_filter == null || _filter!.rulesText != _filterRules) {
       _filter = CatalogFilter.parse(_filterRules);
     }
-    final filter = _filter!;
-    if (filter.isEmpty) return _list;
-    return _list.where((chapter) => !filter.blocked(chapter.name)).toList();
+    return _filter!.clean(chapter.name);
   }
 
   bool _isCurrentBook() {
@@ -82,7 +78,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
       if (!mounted || !_scrollController.hasClients) return;
       final currentChapterId = _currentChapterId();
       if (currentChapterId.isEmpty) return;
-      final visibleIndex = _visible.indexWhere(
+      final visibleIndex = _list.indexWhere(
         (chapter) => chapter.chapterId == currentChapterId,
       );
       if (visibleIndex < 0) return;
@@ -349,7 +345,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    _visible = _visibleChapters();
     final title = _info?.title.isNotEmpty == true
         ? _info!.title
         : widget.book.title;
@@ -378,7 +373,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
               },
               child: ListView.builder(
                 controller: _scrollController,
-                itemCount: _visible.length + 2,
+                itemCount: _list.length + 2,
                 itemBuilder: (context, index) {
                   if (index == 0) {
                     return KeyedSubtree(
@@ -386,7 +381,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
                       child: _header(cs),
                     );
                   }
-                  if (index == _visible.length + 1) {
+                  if (index == _list.length + 1) {
                     if (_loading || _loadingAll) {
                       return Padding(
                         padding: const EdgeInsets.all(16),
@@ -407,7 +402,8 @@ class _CatalogScreenState extends State<CatalogScreen> {
                     }
                     return const SizedBox.shrink();
                   }
-                  final chapter = _visible[index - 1];
+                  final i = index - 1;
+                  final chapter = _list[i];
                   final selected = chapter.chapterId == _currentChapterId();
                   return SizedBox(
                     height: _catalogItemExtent,
@@ -429,7 +425,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
                         ),
                       ),
                       title: Text(
-                        chapter.name,
+                        _chapterDisplayName(chapter),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -442,12 +438,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
                       trailing: selected
                           ? Icon(Icons.volume_up, color: cs.primary, size: 20)
                           : null,
-                      onTap: () {
-                        final fullIndex = _list.indexWhere(
-                          (item) => item.chapterId == chapter.chapterId,
-                        );
-                        if (fullIndex >= 0) _playFrom(fullIndex);
-                      },
+                      onTap: () => _playFrom(i),
                     ),
                   );
                 },

@@ -1,9 +1,10 @@
-/// 目录净化:按用户规则屏蔽章节名,让目录更可读。
+/// 目录净化:按用户规则清理章节名(从名称中剔除匹配文本),让目录更可读。
 ///
 /// 规则文本一行一条:
-/// - `/正则/` 形式按正则匹配(大小写不敏感);
-/// - 其余按子串匹配。
-/// 仅作用于目录**显示层**,播放/缓存顺序不受影响。
+/// - `/正则/` 形式按正则全局替换;
+/// - 其余按子串替换。
+/// 例:规则「娱乐春秋」会把「娱乐春秋01问鼎」净化为「01问鼎」。
+/// 仅作用于目录**显示层**,播放/缓存顺序不受影响;章节不会被隐藏。
 class CatalogFilter {
   CatalogFilter._(this._patterns, this.rulesText);
 
@@ -35,20 +36,18 @@ class CatalogFilter {
     return CatalogFilter._(patterns, rules);
   }
 
-  /// 章节名是否命中任一规则(应被隐藏)。
-  bool blocked(String chapterName) {
-    if (_patterns.isEmpty || chapterName.isEmpty) return false;
+  /// 清理章节名:逐条剔除匹配文本;全部剔除后为空则回退原始名。
+  String clean(String chapterName) {
+    if (_patterns.isEmpty || chapterName.isEmpty) return chapterName;
+    var out = chapterName;
     for (final pattern in _patterns) {
       if (pattern is RegExp) {
-        if (pattern.hasMatch(chapterName)) return true;
-      } else if (chapterName.contains('$pattern')) {
-        return true;
+        out = out.replaceAll(pattern, '');
+      } else {
+        out = out.replaceAll('$pattern', '');
       }
     }
-    return false;
+    final trimmed = out.trim();
+    return trimmed.isEmpty ? chapterName : trimmed;
   }
-
-  /// 过滤章节名列表,保留未命中的。
-  List<String> allowed(List<String> names) =>
-      names.where((name) => !blocked(name)).toList();
 }

@@ -46,10 +46,9 @@ class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
   int _focusRetryCount = 0;
   int _cacheVersion = -1;
   String? _error;
-  // 目录净化:按书存储(播放器目录页 AppBar 编辑),列表渲染使用过滤后的可见子集
+  // 目录净化:按书存储(播放器目录页 AppBar 编辑),渲染时清理章节名
   String _filterRules = '';
   CatalogFilter? _filter;
-  List<Chapter> _visible = const [];
 
   @override
   void initState() {
@@ -71,43 +70,41 @@ class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
     super.dispose();
   }
 
-  /// 播放切集时自动跟随:当前章节滚出视口才滚动,在视口内不打扰浏览。
-  void _onPlayerChanged() {
-    if (!mounted || !_scrollController.hasClients) return;
-    final visibleIndex = _visibleIndexOfCurrent();
-    if (visibleIndex < 0) return;
-    final itemTop = 8 + visibleIndex * _chapterExtent;
-    final itemBottom = itemTop + _chapterExtent;
-    final top = _scrollController.offset;
-    final bottom = top + _scrollController.position.viewportDimension;
-    if (itemTop < top || itemBottom > bottom) {
-      _animateToVisibleIndex(visibleIndex);
-    }
-  }
-
-  List<Chapter> _visibleChapters() {
+  String _chapterDisplayName(Chapter chapter) {
     if (_filter == null || _filter!.rulesText != _filterRules) {
       _filter = CatalogFilter.parse(_filterRules);
     }
-    final filter = _filter!;
-    if (filter.isEmpty) return _chapters;
-    return _chapters.where((chapter) => !filter.blocked(chapter.name)).toList();
+    return _filter!.clean(chapter.name);
   }
 
-  /// 当前播放章节在可见列表中的位置(净化过滤后可能不在列表内,返回 -1)。
-  int _visibleIndexOfCurrent() {
+  /// 当前播放章节在目录中的位置(按 chapterId 匹配,找不到返回 -1)。
+  int _currentCatalogIndex() {
     final currentChapterId = _currentChapterId(PlayerService.instance);
-    if (currentChapterId.isEmpty) return -1;
-    return _visible.indexWhere(
+    if (currentChapterId.isEmpty || _chapters.isEmpty) return -1;
+    return _chapters.indexWhere(
       (chapter) => chapter.chapterId == currentChapterId,
     );
   }
 
-  void _animateToVisibleIndex(int visibleIndex) {
+  /// 播放切集时自动跟随:当前章节滚出视口才滚动,在视口内不打扰浏览。
+  void _onPlayerChanged() {
+    if (!mounted || !_scrollController.hasClients) return;
+    final index = _currentCatalogIndex();
+    if (index < 0) return;
+    final itemTop = 8 + index * _chapterExtent;
+    final itemBottom = itemTop + _chapterExtent;
+    final top = _scrollController.offset;
+    final bottom = top + _scrollController.position.viewportDimension;
+    if (itemTop < top || itemBottom > bottom) {
+      _animateToIndex(index);
+    }
+  }
+
+  void _animateToIndex(int index) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scrollController.hasClients) return;
       final viewport = _scrollController.position.viewportDimension;
-      final target = (8 + visibleIndex * _chapterExtent - viewport * 0.35)
+      final target = (8 + index * _chapterExtent - viewport * 0.35)
           .clamp(0.0, _scrollController.position.maxScrollExtent);
       _scrollController.animateTo(
         target,
@@ -118,12 +115,12 @@ class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
   }
 
   void _scrollBackToCurrent() {
-    final visibleIndex = _visibleIndexOfCurrent();
-    if (visibleIndex < 0) {
+    final index = _currentCatalogIndex();
+    if (index < 0) {
       _toast('当前章节不在目录中');
       return;
     }
-    _animateToVisibleIndex(visibleIndex);
+    _animateToIndex(index);
     _toast('已定位到当前章节');
   }
 
@@ -689,27 +686,14 @@ class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
   }
 
   void _scrollToChapter(int index) {
-    // 入参为完整目录索引;净化过滤后需换算为可见列表位置
-    var visibleIndex = index;
-    if (index >= 0 && index < _chapters.length) {
-      final chapter = _chapters[index];
-      final mapped = _visible.indexWhere(
-        (item) => item.chapterId == chapter.chapterId,
-      );
-      if (mapped < 0) {
-        _toast('该章节已被净化规则隐藏');
-        return;
-      }
-      visibleIndex = mapped;
-    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted ||
           !_scrollController.hasClients ||
-          visibleIndex < 0 ||
-          visibleIndex >= _visible.length) {
+          index < 0 ||
+          index >= _chapters.length) {
         return;
       }
-      final target = (8 + visibleIndex * _chapterExtent).clamp(
+      final target = (8 + index * _chapterExtent).clamp(
         0.0,
         _scrollController.position.maxScrollExtent,
       );
@@ -718,8 +702,8 @@ class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeOutCubic,
       );
-      final chapter = _visible[visibleIndex];
-      _toast('已跳转到第 ${chapter.index == 0 ? visibleIndex + 1 : chapter.index} 集');
+      final chapter = _chapters[index];
+      _toast('已跳转到第 ${chapter.index == 0 ? index + 1 : chapter.index} 集');
     });
   }
 
@@ -734,13 +718,12 @@ class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
         }
         return;
       }
-      // postFrame 时首帧 build 已执行,_visible 已就绪
-      final visibleIndex = _visibleIndexOfCurrent();
-      if (visibleIndex < 0) return;
+      final index = _currentCatalogIndex();
+      if (index < 0) return;
       _focusedCurrent = true;
       _focusRetryCount = 0;
       final viewport = _scrollController.position.viewportDimension;
-      final target = (8 + visibleIndex * _chapterExtent - viewport * 0.35)
+      final target = (8 + index * _chapterExtent - viewport * 0.35)
           .clamp(0.0, _scrollController.position.maxScrollExtent);
       _scrollController.jumpTo(target);
     });
@@ -873,7 +856,7 @@ class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
               const SizedBox(width: 12),
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: _visible.isEmpty ? null : _scrollBackToCurrent,
+                  onPressed: _chapters.isEmpty ? null : _scrollBackToCurrent,
                   icon: const Icon(Icons.center_focus_strong),
                   label: const Text('当前'),
                 ),
@@ -890,20 +873,7 @@ class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
                 if (_chapters.isEmpty) {
                   return _emptyState(cs);
                 }
-                _visible = _visibleChapters();
                 final currentChapterId = _currentChapterId(player);
-                if (_visible.isEmpty) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                        '所有章节都被净化规则隐藏了\n可在 设置 → 播放 → 目录净化规则 调整',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: cs.onSurfaceVariant),
-                      ),
-                    ),
-                  );
-                }
                 return Scrollbar(
                   controller: _scrollController,
                   thumbVisibility: true,
@@ -927,9 +897,9 @@ class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
                       controller: _scrollController,
                       itemExtent: _chapterExtent,
                       padding: const EdgeInsets.fromLTRB(12, 8, 24, 8),
-                      itemCount: _visible.length + 1,
+                      itemCount: _chapters.length + 1,
                       itemBuilder: (context, index) {
-                        if (index == _visible.length) {
+                        if (index == _chapters.length) {
                           return Padding(
                             padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
                             child: Center(
@@ -947,20 +917,16 @@ class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
                             ),
                           );
                         }
-                        final chapter = _visible[index];
+                        final chapter = _chapters[index];
                         final selected = chapter.chapterId == currentChapterId;
                         final cached = _cachedIds.contains(chapter.chapterId);
                         return _ChapterTile(
                           index: index,
                           chapter: chapter,
+                          name: _chapterDisplayName(chapter),
                           selected: selected,
                           cached: cached,
-                          onTap: () {
-                            final fullIndex = _chapters.indexWhere(
-                              (item) => item.chapterId == chapter.chapterId,
-                            );
-                            if (fullIndex >= 0) _play(fullIndex);
-                          },
+                          onTap: () => _play(index),
                         );
                       },
                     ),
@@ -1004,6 +970,7 @@ class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
 class _ChapterTile extends StatelessWidget {
   final int index;
   final Chapter chapter;
+  final String name;
   final bool selected;
   final bool cached;
   final VoidCallback onTap;
@@ -1011,6 +978,7 @@ class _ChapterTile extends StatelessWidget {
   const _ChapterTile({
     required this.index,
     required this.chapter,
+    required this.name,
     required this.selected,
     required this.cached,
     required this.onTap,
@@ -1044,7 +1012,7 @@ class _ChapterTile extends StatelessWidget {
                 ),
               ),
               title: Text(
-                chapter.name,
+                name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
