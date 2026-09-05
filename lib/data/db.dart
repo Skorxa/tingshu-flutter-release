@@ -23,8 +23,32 @@ Future<void> _createShelfTable(Database db, {String table = 'shelf'}) async {
     bookId TEXT,
     title TEXT, cover TEXT, author TEXT,
     sourceName TEXT, addTime INTEGER,
+    followUpdates INTEGER DEFAULT 0,
+    updateBaseline INTEGER DEFAULT 0,
+    lastCheckedAt INTEGER DEFAULT 0,
     PRIMARY KEY(sourceId, bookId)
   )''');
+}
+
+/// 追更标记列(v8):老库幂等补列,新库建表时已包含。
+Future<void> _ensureShelfTrackingColumns(Database db) async {
+  final tableInfo = await db.rawQuery('PRAGMA table_info(shelf)');
+  final names = tableInfo.map((row) => '${row['name']}').toSet();
+  if (!names.contains('followUpdates')) {
+    await db.execute(
+      'ALTER TABLE shelf ADD COLUMN followUpdates INTEGER DEFAULT 0',
+    );
+  }
+  if (!names.contains('updateBaseline')) {
+    await db.execute(
+      'ALTER TABLE shelf ADD COLUMN updateBaseline INTEGER DEFAULT 0',
+    );
+  }
+  if (!names.contains('lastCheckedAt')) {
+    await db.execute(
+      'ALTER TABLE shelf ADD COLUMN lastCheckedAt INTEGER DEFAULT 0',
+    );
+  }
 }
 
 Future<void> _createCacheTable(
@@ -152,7 +176,7 @@ Future<Database> getDb() async {
   final dir = await getDatabasesPath();
   _db = await openDatabase(
     join(dir, 'tingshu.db'),
-    version: 7,
+    version: 8,
     onCreate: (db, _) async {
       await _createProgressTable(db);
       await _createShelfTable(db);
@@ -179,10 +203,14 @@ Future<Database> getDb() async {
       if (oldVersion < 7) {
         await _createCacheStateTable(db);
       }
+      if (oldVersion < 8) {
+        await _ensureShelfTrackingColumns(db);
+      }
     },
     onOpen: (db) async {
       await _createCacheStateTable(db);
       await _createIndexes(db);
+      await _ensureShelfTrackingColumns(db);
     },
   );
   return _db!;

@@ -113,6 +113,60 @@ class MainActivity : AudioServiceActivity() {
                 else -> result.notImplemented()
             }
         }
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "tingshu/update_notify"
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "notify" -> showUpdateNotification(
+                    call.argument<String>("title") ?: "橘听",
+                    call.argument<String>("body") ?: "",
+                    result
+                )
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    private fun showUpdateNotification(title: String, body: String, result: MethodChannel.Result) {
+        try {
+            val notificationManager = NotificationManagerCompat.from(this)
+            if (!notificationManager.areNotificationsEnabled()) {
+                result.success(false)
+                return
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = android.app.NotificationChannel(
+                    "updates",
+                    "更新提醒",
+                    android.app.NotificationManager.IMPORTANCE_DEFAULT
+                )
+                notificationManager.createNotificationChannel(channel)
+            }
+            val launchIntent = Intent(this, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            }
+            val pendingIntent = android.app.PendingIntent.getActivity(
+                this,
+                2001,
+                launchIntent,
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+            )
+            val notification = androidx.core.app.NotificationCompat.Builder(this, "updates")
+                .setSmallIcon(applicationInfo.icon)
+                .setContentTitle(title)
+                .setContentText(body)
+                .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText(body))
+                .setAutoCancel(true)
+                .setContentIntent(pendingIntent)
+                .build()
+            notificationManager.notify(2001, notification)
+            result.success(true)
+        } catch (e: SecurityException) {
+            result.success(false)
+        } catch (e: Exception) {
+            result.success(false)
+        }
     }
 
     private fun getDeviceIdentity(result: MethodChannel.Result) {

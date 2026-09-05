@@ -7,6 +7,9 @@ import 'log_service.dart';
 class ShelfBook {
   final String sourceId, bookId, title, cover, author, sourceName;
   final int addTime;
+  final bool followUpdates;
+  final int updateBaseline;
+  final int lastCheckedAt;
 
   ShelfBook({
     required this.sourceId,
@@ -16,6 +19,9 @@ class ShelfBook {
     required this.author,
     required this.sourceName,
     required this.addTime,
+    this.followUpdates = false,
+    this.updateBaseline = 0,
+    this.lastCheckedAt = 0,
   });
 
   factory ShelfBook.fromMap(Map m) => ShelfBook(
@@ -26,6 +32,9 @@ class ShelfBook {
     author: '${m['author']}',
     sourceName: '${m['sourceName'] ?? ''}',
     addTime: (m['addTime'] as int?) ?? 0,
+    followUpdates: (m['followUpdates'] as int?) == 1,
+    updateBaseline: (m['updateBaseline'] as int?) ?? 0,
+    lastCheckedAt: (m['lastCheckedAt'] as int?) ?? 0,
   );
 }
 
@@ -105,6 +114,51 @@ class ShelfService extends ChangeNotifier {
     }
   }
 
+  /// 标记/取消追更。开启时同时刷新 lastCheckedAt,避免开启瞬间立即全查。
+  Future<void> setFollowUpdates({
+    required String sourceId,
+    required String bookId,
+    required bool value,
+  }) async {
+    final db = await getDb();
+    final updates = <String, dynamic>{'followUpdates': value ? 1 : 0};
+    if (value) {
+      updates['lastCheckedAt'] = DateTime.now().millisecondsSinceEpoch;
+    }
+    final rows = await db.update(
+      'shelf',
+      updates,
+      where: 'sourceId = ? AND bookId = ?',
+      whereArgs: [sourceId, bookId],
+    );
+    if (rows > 0) {
+      LogService.instance.info(
+        'Shelf',
+        value ? '开启追更' : '关闭追更',
+        detail: 'BookID: $bookId\n音源: $sourceId',
+      );
+      notifyListeners();
+    }
+  }
+
+  /// 更新追更基线(网盘=顶层 total,JS 源=目录缓存章节数),不触发 UI 通知。
+  Future<void> updateTrackingBaseline({
+    required String sourceId,
+    required String bookId,
+    required int baseline,
+  }) async {
+    final db = await getDb();
+    await db.update(
+      'shelf',
+      {
+        'updateBaseline': baseline,
+        'lastCheckedAt': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'sourceId = ? AND bookId = ?',
+      whereArgs: [sourceId, bookId],
+    );
+  }
+
   Future<bool> contains({
     required String sourceId,
     required String bookId,
@@ -153,6 +207,10 @@ class ShelfService extends ChangeNotifier {
         'author': '${row['author'] ?? ''}',
         'sourceName': '${row['sourceName'] ?? ''}',
         'addTime': addTime,
+        // 同步覆盖时保留本地追更状态(基线属于本机目录,不可同步)
+        'followUpdates': (existing?['followUpdates'] as int?) ?? 0,
+        'updateBaseline': (existing?['updateBaseline'] as int?) ?? 0,
+        'lastCheckedAt': (existing?['lastCheckedAt'] as int?) ?? 0,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
       changed++;
     }

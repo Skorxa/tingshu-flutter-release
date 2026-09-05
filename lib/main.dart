@@ -11,6 +11,7 @@ import 'data/log_service.dart';
 import 'data/quark_pan_service.dart';
 import 'data/settings_service.dart';
 import 'data/theme_service.dart';
+import 'data/update_check_service.dart';
 import 'data/webdav_service.dart';
 import 'data/alist_service.dart';
 import 'data/webdav_sync_service.dart';
@@ -130,6 +131,12 @@ Future<void> _initDeferredServices() async {
     LogService.instance.info('Sync', 'WebDAV 同步服务初始化完成');
   } catch (e, stack) {
     LogService.instance.error('Sync', 'WebDAV 同步服务初始化失败', error: e, stack: stack);
+  }
+  try {
+    UpdateCheckService.instance.init();
+    LogService.instance.info('UpdateCheck', '追更检查服务已就绪');
+  } catch (e, stack) {
+    LogService.instance.error('UpdateCheck', '追更检查服务初始化失败', error: e, stack: stack);
   }
 }
 

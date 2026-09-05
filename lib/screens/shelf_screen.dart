@@ -8,7 +8,9 @@ import '../data/catalog_cache_service.dart';
 import '../data/log_service.dart';
 import '../data/progress_service.dart';
 import '../data/quark_pan_service.dart';
+import '../data/background_protection_service.dart';
 import '../data/shelf_service.dart';
+import '../data/update_check_service.dart';
 import '../data/webdav_service.dart';
 import '../player/player_service.dart';
 import '../source/models.dart';
@@ -40,6 +42,7 @@ class _ShelfScreenState extends State<ShelfScreen>
     _tabController = TabController(length: 2, vsync: this)
       ..addListener(_onTabChanged);
     ShelfService.instance.addListener(_onShelfChanged);
+    UpdateCheckService.instance.addListener(_onUpdateCheckChanged);
     _load();
   }
 
@@ -49,7 +52,26 @@ class _ShelfScreenState extends State<ShelfScreen>
       ..removeListener(_onTabChanged)
       ..dispose();
     ShelfService.instance.removeListener(_onShelfChanged);
+    UpdateCheckService.instance.removeListener(_onUpdateCheckChanged);
     super.dispose();
+  }
+
+  void _onUpdateCheckChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _checkFollowUpdates() async {
+    final updated = await UpdateCheckService.instance.checkAll(
+      reason: 'manual',
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          updated > 0 ? '追更的 $updated 本书有更新' : '追更的书暂无更新',
+        ),
+      ),
+    );
   }
 
   void _onTabChanged() {
@@ -667,16 +689,51 @@ class _ShelfScreenState extends State<ShelfScreen>
               onTap: () => Navigator.pop(ctx, 'debug'),
             ),
             ListTile(
-              leading: const Icon(Icons.swap_horizontal_circle_outlined),
-              title: const Text('换源播放'),
-              subtitle: const Text('按书名搜索其他音源，对齐当前章节'),
-              onTap: () => Navigator.pop(ctx, 'switch'),
+              leading: const Icon(Icons.bug_report_outlined),
+              title: const Text('调试音源'),
+              subtitle: const Text('自动跑搜索、目录、音频解析并写入日志'),
+              onTap: () => Navigator.pop(ctx, 'debug'),
             ),
+            if (sourceId != 'webdav')
+              ListTile(
+                leading: Icon(
+                  book.followUpdates
+                      ? Icons.notifications_off_outlined
+                      : Icons.notifications_active_outlined,
+                ),
+                title: Text(
+                  book.followUpdates ? '关闭追更' : '标记未完结 · 开启追更',
+                ),
+                subtitle: Text(
+                  book.followUpdates
+                      ? '不再检查这本书的更新'
+                      : '本书有新章节时发送系统通知',
+                ),
+                onTap: () => Navigator.pop(
+                  ctx,
+                  book.followUpdates ? 'unfollow' : 'follow',
+                ),
+              ),
           ],
         ),
       ),
     );
     if (!mounted || action == null) return;
+    if (action == 'follow' || action == 'unfollow') {
+      await ShelfService.instance.setFollowUpdates(
+        sourceId: sourceId,
+        bookId: book.bookId,
+        value: action == 'follow',
+      );
+      _load();
+      if (action == 'follow' && mounted) {
+        // 追更依赖系统通知,引导用户授权(Android 13+)
+        unawaited(
+          BackgroundProtectionService.requestNotificationPermission(),
+        );
+      }
+      return;
+    }
     if (action == 'config') {
       await Navigator.push(
         context,
@@ -821,6 +878,20 @@ class _ShelfScreenState extends State<ShelfScreen>
       appBar: AppBar(
         title: const Text('我的书架'),
         actions: [
+          if (!showingHistory && _books.any((book) => book.followUpdates))
+            IconButton(
+              icon: UpdateCheckService.instance.checking
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.notifications_active_outlined),
+              tooltip: '检查追更书籍更新',
+              onPressed: UpdateCheckService.instance.checking
+                  ? null
+                  : _checkFollowUpdates,
+            ),
           if (showingHistory && _history.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.delete_sweep_outlined),
@@ -917,6 +988,29 @@ class _ShelfScreenState extends State<ShelfScreen>
                               style: TextStyle(
                                 fontSize: 13,
                                 color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                          if (b.followUpdates) ...[
+                            const SizedBox(height: 6),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: cs.primaryContainer,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  '追更中',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: cs.onPrimaryContainer,
+                                  ),
+                                ),
                               ),
                             ),
                           ],
