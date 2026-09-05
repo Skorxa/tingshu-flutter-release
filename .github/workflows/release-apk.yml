@@ -32,17 +32,16 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
+          # 与本地开发版本一致,保证构建可重复;升级 Flutter 时需同步修改此处。
+          flutter-version: 3.48.0-0.4.pre
           channel: master
           cache: true
-
-      - name: Upgrade Flutter
-        run: flutter upgrade
 
       - name: Resolve dependencies
         run: flutter pub get
 
       - name: Analyze
-        run: flutter analyze lib
+        run: flutter analyze lib test
 
       - name: Prepare Android signing
         shell: bash
