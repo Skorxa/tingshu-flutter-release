@@ -18,6 +18,7 @@ import '../widgets/cover_image.dart';
 import 'player_screen.dart';
 import 'runtime_log_screen.dart';
 import 'source_config_screen.dart';
+import 'source_switch_screen.dart';
 
 class ShelfScreen extends StatefulWidget {
   const ShelfScreen({super.key});
@@ -665,6 +666,12 @@ class _ShelfScreenState extends State<ShelfScreen>
               subtitle: const Text('自动跑搜索、目录、音频解析并写入日志'),
               onTap: () => Navigator.pop(ctx, 'debug'),
             ),
+            ListTile(
+              leading: const Icon(Icons.swap_horizontal_circle_outlined),
+              title: const Text('换源播放'),
+              subtitle: const Text('按书名搜索其他音源，对齐当前章节'),
+              onTap: () => Navigator.pop(ctx, 'switch'),
+            ),
           ],
         ),
       ),
@@ -677,6 +684,28 @@ class _ShelfScreenState extends State<ShelfScreen>
           builder: (_) => SourceConfigScreen(sourceId: sourceId),
         ),
       );
+      return;
+    }
+    if (action == 'switch') {
+      final progress = await ProgressService.instance.load(
+        sourceId: sourceId,
+        bookId: book.bookId,
+      );
+      if (!mounted) return;
+      final chapterIdx = (progress?['chapterIdx'] as num?)?.toInt() ?? 0;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => SourceSwitchScreen(
+            sourceId: sourceId,
+            bookId: book.bookId,
+            bookTitle: book.title,
+            currentChapterName: '${progress?['chapterName'] ?? ''}',
+            currentIndex: chapterIdx,
+          ),
+        ),
+      );
+      _load();
       return;
     }
     if (action == 'debug') {

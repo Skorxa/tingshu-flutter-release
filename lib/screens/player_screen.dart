@@ -6,6 +6,7 @@ import '../player/player_service.dart';
 import '../source/source_manager.dart';
 import '../widgets/cover_image.dart';
 import 'player_catalog_screen.dart';
+import 'source_switch_screen.dart';
 
 class PlayerScreen extends StatelessWidget {
   const PlayerScreen({super.key});
@@ -407,6 +408,36 @@ class PlayerScreen extends StatelessWidget {
                             builder: (_) => const PlayerCatalogScreen(),
                           ),
                         ),
+                      ),
+                      _toolButton(
+                        cs,
+                        icon: Icons.swap_horizontal_circle_outlined,
+                        label: '换源',
+                        onTap: () {
+                          if (p.bookId.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('当前没有正在播放的书')),
+                            );
+                            return;
+                          }
+                          final chapterName =
+                              p.currentIndex >= 0 &&
+                                  p.currentIndex < p.chapters.length
+                              ? '${p.chapters[p.currentIndex]['name'] ?? ''}'
+                              : '';
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => SourceSwitchScreen(
+                                sourceId: p.sourceId,
+                                bookId: p.bookId,
+                                bookTitle: p.bookTitle,
+                                currentChapterName: chapterName,
+                                currentIndex: p.currentIndex,
+                              ),
+                            ),
+                          );
+                        },
                       ),
                     ],
                   ),
