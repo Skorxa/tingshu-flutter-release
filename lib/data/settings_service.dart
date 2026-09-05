@@ -39,6 +39,7 @@ class SettingsService extends ChangeNotifier {
   static const _kDynamicColor = 'settings_dynamic_color';
   static const _kSearchMatchMode = 'settings_search_match_mode';
   static const _kUpdateManifestUrl = 'settings_update_manifest_url';
+  static const _kCatalogFilterRules = 'settings_catalog_filter_rules';
   static const _kDiscoverSourceIds = 'settings_discover_source_ids';
  static const _kDiscoverSelectionConfigured =
      'settings_discover_selection_configured';
@@ -55,6 +56,7 @@ class SettingsService extends ChangeNotifier {
   int _cleanupLimit = 100;
   int _cacheSpaceLimit = 0; // 0 表示不限制，单位 MB
   String _updateManifestUrl = '';
+  String _catalogFilterRules = '';
  List<String> _discoverSourceIds = [];
  bool _discoverSelectionConfigured = false;
  int _discoverRevision = 0;
@@ -77,6 +79,7 @@ class SettingsService extends ChangeNotifier {
   int get cleanupLimit => _cleanupLimit;
   int get cacheSpaceLimit => _cacheSpaceLimit;
   String get updateManifestUrl => _updateManifestUrl;
+  String get catalogFilterRules => _catalogFilterRules;
   List<String> get discoverSourceIds => List.unmodifiable(_discoverSourceIds);
  bool get discoverSelectionConfigured => _discoverSelectionConfigured;
  int get discoverRevision => _discoverRevision;
@@ -134,6 +137,7 @@ class SettingsService extends ChangeNotifier {
       0,
     );
     _updateManifestUrl = prefs.getString(_kUpdateManifestUrl) ?? '';
+    _catalogFilterRules = prefs.getString(_kCatalogFilterRules) ?? '';
     _discoverSourceIds = (prefs.getStringList(_kDiscoverSourceIds) ?? const [])
         .where((id) => id.trim().isNotEmpty)
         .toList();
@@ -157,6 +161,7 @@ class SettingsService extends ChangeNotifier {
       'cleanupLimit': _cleanupLimit,
       'cacheSpaceLimit': _cacheSpaceLimit,
       'updateManifestUrl': _updateManifestUrl,
+      'catalogFilterRules': _catalogFilterRules,
       'discoverSourceIds': List<String>.from(_discoverSourceIds),
       'discoverSelectionConfigured': _discoverSelectionConfigured,
     };
@@ -194,6 +199,7 @@ class SettingsService extends ChangeNotifier {
         0,
       );
       _updateManifestUrl = '${data['updateManifestUrl'] ?? ''}';
+      _catalogFilterRules = '${data['catalogFilterRules'] ?? ''}';
       _discoverSourceIds =
           ((data['discoverSourceIds'] as List?) ?? const [])
               .map((e) => '$e')
@@ -215,6 +221,7 @@ class SettingsService extends ChangeNotifier {
       await prefs.setInt(_kCleanupLimit, _cleanupLimit);
       await prefs.setInt(_kCacheSpaceLimit, _cacheSpaceLimit);
       await prefs.setString(_kUpdateManifestUrl, _updateManifestUrl);
+      await prefs.setString(_kCatalogFilterRules, _catalogFilterRules);
       await prefs.setStringList(_kDiscoverSourceIds, _discoverSourceIds);
       await prefs.setBool(
         _kDiscoverSelectionConfigured,
@@ -322,6 +329,13 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kUpdateManifestUrl, _updateManifestUrl);
+  }
+
+  Future<void> setCatalogFilterRules(String value) async {
+    _catalogFilterRules = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kCatalogFilterRules, _catalogFilterRules);
   }
 
  Future<void> setDiscoverSourceIds(List<String> ids) async {

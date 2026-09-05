@@ -4,7 +4,9 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../data/catalog_cache_service.dart';
+import '../data/catalog_filter.dart';
 import '../data/progress_service.dart';
+import '../data/settings_service.dart';
 import '../data/shelf_service.dart';
 import '../player/player_service.dart';
 import '../source/models.dart';
@@ -32,6 +34,11 @@ class _CatalogScreenState extends State<CatalogScreen> {
   static const _maxAutoPages = 3;
   final _random = Random();
   final List<Chapter> _list = [];
+  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _headerKey = GlobalKey();
+  CatalogFilter? _filter;
+  String _filterRulesCache = '';
+  List<Chapter> _visible = const [];
   late final String _sourceId;
   CatalogInfo? _info;
   int _page = 1;
@@ -43,6 +50,58 @@ class _CatalogScreenState extends State<CatalogScreen> {
   bool _resumed = false;
   String? _error;
 
+  /// 目录净化后的可见章节(渲染层过滤,播放/缓存不受影响)。
+  List<Chapter> _visibleChapters() {
+    final rules = SettingsService.instance.catalogFilterRules;
+    if (_filter == null || _filterRulesCache != rules) {
+      _filterRulesCache = rules;
+      _filter = CatalogFilter.parse(rules);
+    }
+    final filter = _filter!;
+    if (filter.isEmpty) return _list;
+    return _list.where((chapter) => !filter.blocked(chapter.name)).toList();
+  }
+
+  bool _isCurrentBook() {
+    final player = PlayerService.instance;
+    return player.sourceId == _sourceId &&
+        player.bookId == widget.book.bookId &&
+        player.bookId.isNotEmpty;
+  }
+
+  String _currentChapterId() {
+    final player = PlayerService.instance;
+    if (!_isCurrentBook() ||
+        player.currentIndex < 0 ||
+        player.currentIndex >= player.chapters.length) {
+      return '';
+    }
+    return '${player.chapters[player.currentIndex]['chapterId'] ?? ''}';
+  }
+
+  /// 正在播同一本书时,把目录滚动到当前章节(估算头部高度 + 固定行高)。
+  void _focusCurrentChapter() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      final currentChapterId = _currentChapterId();
+      if (currentChapterId.isEmpty) return;
+      final visibleIndex = _visible.indexWhere(
+        (chapter) => chapter.chapterId == currentChapterId,
+      );
+      if (visibleIndex < 0) return;
+      final headerHeight =
+          _headerKey.currentContext?.size?.height ?? 240.0;
+      final viewport = _scrollController.position.viewportDimension;
+      final target = (headerHeight + visibleIndex * _catalogItemExtent - viewport * 0.3)
+          .clamp(0.0, _scrollController.position.maxScrollExtent);
+      if ((_scrollController.offset - target).abs() > viewport * 0.5) {
+        _scrollController.jumpTo(target);
+      }
+    });
+  }
+
+  static const _catalogItemExtent = 72.0;
+
   @override
   void initState() {
     super.initState();
@@ -51,6 +110,12 @@ class _CatalogScreenState extends State<CatalogScreen> {
         : SourceManager.instance.activeId;
     _checkShelf();
     _initCatalog();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _initCatalog() async {
@@ -65,6 +130,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
     }
     if (!mounted) return;
     if (_hasMore) unawaited(_loadRemainingCatalog());
+    _focusCurrentChapter();
   }
 
   Future<void> _restoreCachedCatalog() async {
@@ -279,6 +345,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    _visible = _visibleChapters();
     final title = _info?.title.isNotEmpty == true
         ? _info!.title
         : widget.book.title;
@@ -306,10 +373,16 @@ class _CatalogScreenState extends State<CatalogScreen> {
                 return false;
               },
               child: ListView.builder(
-                itemCount: _list.length + 2,
+                controller: _scrollController,
+                itemCount: _visible.length + 2,
                 itemBuilder: (context, index) {
-                  if (index == 0) return _header(cs);
-                  if (index == _list.length + 1) {
+                  if (index == 0) {
+                    return KeyedSubtree(
+                      key: _headerKey,
+                      child: _header(cs),
+                    );
+                  }
+                  if (index == _visible.length + 1) {
                     if (_loading || _loadingAll) {
                       return Padding(
                         padding: const EdgeInsets.all(16),
@@ -330,21 +403,48 @@ class _CatalogScreenState extends State<CatalogScreen> {
                     }
                     return const SizedBox.shrink();
                   }
-                  final i = index - 1;
-                  return ListTile(
-                    leading: SizedBox(
-                      width: 32,
-                      child: Text(
-                        '${_list[i].index}',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: cs.onSurfaceVariant,
+                  final chapter = _visible[index - 1];
+                  final selected = chapter.chapterId == _currentChapterId();
+                  return SizedBox(
+                    height: _catalogItemExtent,
+                    child: ListTile(
+                      leading: SizedBox(
+                        width: 32,
+                        child: Text(
+                          '${chapter.index}',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: selected
+                                ? cs.primary
+                                : cs.onSurfaceVariant,
+                            fontWeight: selected
+                                ? FontWeight.w700
+                                : FontWeight.normal,
+                          ),
                         ),
                       ),
+                      title: Text(
+                        chapter.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: selected ? cs.primary : null,
+                          fontWeight: selected
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                        ),
+                      ),
+                      trailing: selected
+                          ? Icon(Icons.volume_up, color: cs.primary, size: 20)
+                          : null,
+                      onTap: () {
+                        final fullIndex = _list.indexWhere(
+                          (item) => item.chapterId == chapter.chapterId,
+                        );
+                        if (fullIndex >= 0) _playFrom(fullIndex);
+                      },
                     ),
-                    title: Text(_list[i].name),
-                    onTap: () => _playFrom(i),
                   );
                 },
               ),
