@@ -1,12 +1,12 @@
 {
-  "versionName": "1.4.0",
-  "versionCode": 12,
+  "versionName": "1.5.0",
+  "versionCode": 13,
   "force": false,
-  "changelog": "移除音乐模式，专注听书；修复激活码概率性掉激活；新增 WebDAV 多设备加密同步（独立配置入口，进度/书架/设置/音源）",
-  "sha256": "5e83f9470ccb9566cde5985eb0822c966f8db954349741b5728bffd3610cf74f",
-  "size": 26342359,
-  "publishedAt": "2026-09-04T14:39:24Z",
+  "changelog": "自动构建版本 1.5.0",
+  "sha256": "e663bd60b50c8d2a875338b4af86cd011033e5e5b58881252be5d7a5a76d8ae9",
+  "size": 26673531,
+  "publishedAt": "2026-09-05T06:56:41Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.4.0/tingshu-1.4.0-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.5.0/tingshu-1.5.0-arm64.apk"
   ]
 }
