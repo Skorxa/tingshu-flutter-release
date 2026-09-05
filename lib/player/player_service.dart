@@ -551,6 +551,19 @@ class PlayerService extends ChangeNotifier {
       artUri: _coverUri(cover),
     );
 
+    // 缓存上下文随播放请求立即切换:用户开始收听某本书,上一本书的自动缓存
+    // 就该停。交接不能放在 play() 之后——just_audio 的 play() 在播放结束/
+    // 出错/被打断时才完成,等它会导致:(1)新书播放期间后台仍在缓存上一本书;
+    // (2)数分钟后过期的播放请求恢复执行,把缓存上下文又覆盖回旧书。
+    CacheService.instance.startForPlayback(
+      sourceId: sourceId,
+      bookId: bookId,
+      bookTitle: bookTitle,
+      cover: cover,
+      chapters: chapters,
+      currentIndex: index,
+    );
+
     Object? lastError;
     StackTrace? lastStack;
     for (var attempt = 0; attempt < 2; attempt++) {
@@ -578,17 +591,10 @@ class PlayerService extends ChangeNotifier {
         await _player.setAudioSource(source);
         if (!_isPlayRequestActive(seq, sourceId, bookId, chapterId)) return;
         await _player.setSpeed(_speed);
-        await _player.play();
         _error = null;
         _scheduleRecoveryReset(chapterId);
-        CacheService.instance.startForPlayback(
-          sourceId: sourceId,
-          bookId: bookId,
-          bookTitle: bookTitle,
-          cover: cover,
-          chapters: chapters,
-          currentIndex: index,
-        );
+        await _player.play();
+        if (!_isPlayRequestActive(seq, sourceId, bookId, chapterId)) return;
         if (seekTo > 3) {
           Future.delayed(const Duration(milliseconds: 1500), () {
             if (!_isPlayRequestActive(seq, sourceId, bookId, chapterId)) return;
