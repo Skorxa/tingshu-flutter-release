@@ -1,12 +1,12 @@
 {
-  "versionName": "1.5.0",
-  "versionCode": 13,
+  "versionName": "1.5.1",
+  "versionCode": 14,
   "force": false,
-  "changelog": "自动构建版本 1.5.0",
-  "sha256": "e663bd60b50c8d2a875338b4af86cd011033e5e5b58881252be5d7a5a76d8ae9",
-  "size": 26673531,
-  "publishedAt": "2026-09-05T06:56:41Z",
+  "changelog": "自动构建版本 1.5.1",
+  "sha256": "9161a1dff5e9c843f2e1cd6837506e65d3710ab1c5e43d88dd39df32585b4134",
+  "size": 26673535,
+  "publishedAt": "2026-09-05T07:55:01Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.5.0/tingshu-1.5.0-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.5.1/tingshu-1.5.1-arm64.apk"
   ]
 }
