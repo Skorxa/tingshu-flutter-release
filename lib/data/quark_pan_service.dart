@@ -5,11 +5,11 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path_util;
 import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../source/models.dart';
 import 'catalog_cache_service.dart';
 import 'log_service.dart';
+import 'secure_store.dart';
 
 class QuarkPanItem {
   final String fid;
@@ -86,6 +86,8 @@ class QuarkPanService extends ChangeNotifier {
   static final instance = QuarkPanService._();
 
   static const _kConfig = 'quark_pan_config';
+  // 配置(含登录 Cookie)的加密存储键;明文旧键由 SecureStore 迁移后删除。
+  static const _kConfigSecure = 'sec.quark_pan_config';
   static const rootFid = '0';
   static const _pageSize = 200;
   static const _maxAutoPages = 300;
@@ -115,8 +117,10 @@ class QuarkPanService extends ChangeNotifier {
   bool get ready => _cookie.isNotEmpty;
 
   Future<void> init() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_kConfig);
+    final raw = await SecureStore.instance.readMigrated(
+      _kConfig,
+      _kConfigSecure,
+    );
     if (raw == null || raw.isEmpty) return;
     try {
       final map = jsonDecode(raw) as Map<String, dynamic>;
@@ -127,8 +131,10 @@ class QuarkPanService extends ChangeNotifier {
   }
 
   Future<void> _persist() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kConfig, jsonEncode({'cookie': _cookie}));
+    await SecureStore.instance.write(
+      _kConfigSecure,
+      jsonEncode({'cookie': _cookie}),
+    );
   }
 
   Future<void> saveCookie(String cookie) async {

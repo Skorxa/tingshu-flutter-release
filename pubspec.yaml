@@ -46,6 +46,8 @@ dependencies:
   cached_network_image: ^3.4.1
   crypto: ^3.0.6
   pointycastle: ^3.7.3
+  flutter_secure_storage: ^9.2.4
+  pool: ^1.5.3
 
 dev_dependencies:
   flutter_test:

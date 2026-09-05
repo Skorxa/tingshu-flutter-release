@@ -13,6 +13,7 @@ import 'discover_source_setting_screen.dart';
 import 'runtime_log_screen.dart';
 import 'subscription_manage_screen.dart';
 import 'source_config_screen.dart';
+import '../widgets/third_party_risk_dialog.dart';
 
 class SourceManageScreen extends StatefulWidget {
   const SourceManageScreen({super.key});
@@ -134,6 +135,7 @@ class _SourceManageScreenState extends State<SourceManageScreen> {
   }
 
   Future<void> _addSource(String code) async {
+    if (!await confirmThirdPartySourceRisk(context)) return;
     setState(() => _loading = true);
     try {
       final meta = await SourceManager.instance.addSource(code);

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/log_service.dart';
 import '../source/models.dart';
 import '../source/source_manager.dart';
+import '../widgets/third_party_risk_dialog.dart';
 
 class SubscriptionManageScreen extends StatefulWidget {
   const SubscriptionManageScreen({super.key});
@@ -35,6 +36,8 @@ class _SubscriptionManageScreenState extends State<SubscriptionManageScreen> {
       builder: (_) => const _SubscriptionEditDialog(),
     );
     if (draft == null) return;
+    if (!mounted) return;
+    if (!await confirmThirdPartySourceRisk(context)) return;
     setState(() => _checkingAll = true);
     try {
       final meta = await SourceManager.instance.saveSubscription(

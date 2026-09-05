@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_update_service.dart';
 import 'log_service.dart';
+import 'secure_store.dart';
 
 enum CloudAuthState {
   checking,
@@ -94,6 +95,12 @@ class CloudAuthService extends ChangeNotifier {
   static const _lastVerifiedKey = 'cloud_auth_last_verified';
   static const _offlineGraceKey = 'cloud_auth_offline_grace';
   static const _inviteCodeKey = 'cloud_auth_invite_code';
+  // 令牌/license/邀请码的加密存储键;明文旧键由 SecureStore 迁移后删除。
+  // 有效期时间戳等非敏感字段仍留 SharedPreferences。
+  static const _accessKeySecure = 'sec.cloud_auth_access_token';
+  static const _refreshKeySecure = 'sec.cloud_auth_refresh_token';
+  static const _licenseKeySecure = 'sec.cloud_auth_license';
+  static const _inviteCodeKeySecure = 'sec.cloud_auth_invite_code';
 
   final Dio _dio = Dio(
     BaseOptions(
@@ -223,8 +230,7 @@ class CloudAuthService extends ChangeNotifier {
       // 记住邀请码,掉激活时可静默重新激活。
       // 服务端对同设备 + 同邀请码的重激活不消耗邀请码使用次数。
       _storedInviteCode = code;
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_inviteCodeKey, code);
+      await SecureStore.instance.write(_inviteCodeKeySecure, code);
       LogService.instance.info(
         'CloudAuth',
         '设备授权成功',
@@ -368,14 +374,16 @@ class CloudAuthService extends ChangeNotifier {
 
   Future<void> _loadStoredAuthorization() async {
     final prefs = await SharedPreferences.getInstance();
-    _accessToken = prefs.getString(_accessKey) ?? '';
+    final store = SecureStore.instance;
+    _accessToken = await store.readMigrated(_accessKey, _accessKeySecure) ?? '';
     _accessExpiresAt = prefs.getInt(_accessExpiryKey) ?? 0;
-    _refreshToken = prefs.getString(_refreshKey) ?? '';
+    _refreshToken = await store.readMigrated(_refreshKey, _refreshKeySecure) ?? '';
     _refreshExpiresAt = prefs.getInt(_refreshExpiryKey) ?? 0;
     _lastVerifiedAt = prefs.getInt(_lastVerifiedKey) ?? 0;
     _offlineGraceSeconds = prefs.getInt(_offlineGraceKey) ?? 48 * 60 * 60;
-    _storedInviteCode = prefs.getString(_inviteCodeKey) ?? '';
-    final rawLicense = prefs.getString(_licenseKey);
+    _storedInviteCode =
+        await store.readMigrated(_inviteCodeKey, _inviteCodeKeySecure) ?? '';
+    final rawLicense = await store.readMigrated(_licenseKey, _licenseKeySecure);
     if (rawLicense != null && rawLicense.isNotEmpty) {
       try {
         final decoded = jsonDecode(rawLicense);
@@ -386,15 +394,16 @@ class CloudAuthService extends ChangeNotifier {
 
   Future<void> _saveAuthorization() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_accessKey, _accessToken);
+    final store = SecureStore.instance;
+    await store.write(_accessKeySecure, _accessToken);
     await prefs.setInt(_accessExpiryKey, _accessExpiresAt);
-    await prefs.setString(_refreshKey, _refreshToken);
+    await store.write(_refreshKeySecure, _refreshToken);
     await prefs.setInt(_refreshExpiryKey, _refreshExpiresAt);
     await prefs.setInt(_lastVerifiedKey, _lastVerifiedAt);
     await prefs.setInt(_offlineGraceKey, _offlineGraceSeconds);
     if (_license != null) {
-      await prefs.setString(
-        _licenseKey,
+      await store.write(
+        _licenseKeySecure,
         jsonEncode({
           'id': _license!.userId,
           'displayName': _license!.displayName,
@@ -414,12 +423,14 @@ class CloudAuthService extends ChangeNotifier {
     _license = null;
     _lastVerifiedAt = 0;
     final prefs = await SharedPreferences.getInstance();
+    final store = SecureStore.instance;
     await Future.wait([
-      prefs.remove(_accessKey),
+      store.delete(_accessKeySecure),
+      store.delete(_refreshKeySecure),
+      store.delete(_licenseKeySecure),
+      // 注意:邀请码(_inviteCodeKeySecure)刻意不清除,供静默重激活使用。
       prefs.remove(_accessExpiryKey),
-      prefs.remove(_refreshKey),
       prefs.remove(_refreshExpiryKey),
-      prefs.remove(_licenseKey),
       prefs.remove(_lastVerifiedKey),
     ]);
   }

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:dio/dio.dart';
 import 'package:flutter_js/flutter_js.dart';
 
+import '../data/log_service.dart';
 import 'source_crypto.dart';
 
 /// 内嵌 JS 引擎(QuickJS):运行用户粘贴的 JS 音源脚本。
@@ -119,6 +120,7 @@ class JsEngine {
   void _handleHttp(dynamic args) {
     final m = (args is Map) ? args : const {};
     final int id = (m['id'] is num) ? (m['id'] as num).toInt() : 0;
+    final String sourceId = '${m['sourceId'] ?? ''}';
     final String url = '${m['url'] ?? ''}';
     final String method = '${m['method'] ?? 'GET'}'.toUpperCase();
     final dynamic data = m['data'];
@@ -129,17 +131,20 @@ class JsEngine {
     final int timeout = (m['timeout'] is num)
         ? (m['timeout'] as num).toInt()
         : 15000;
-    _doHttp(id, url, method, data, header, timeout);
+    _doHttp(id, sourceId, url, method, data, header, timeout);
   }
 
   Future<void> _doHttp(
     int id,
+    String sourceId,
     String url,
     String method,
     dynamic data,
     Map<String, dynamic> header,
     int timeout,
   ) async {
+    // 外联审计:只记录 scheme/host/path,不带 query,防止 URL 中的令牌进日志。
+    final target = _describeTarget(url);
     try {
       final options = Options(
         method: method,
@@ -174,10 +179,28 @@ class JsEngine {
         'header': resp.headers.map,
         'data': parsed,
       });
+      LogService.instance.info(
+        'SourceNet',
+        '音源外联',
+        detail:
+            '源 $sourceId · $method $target → HTTP ${resp.statusCode ?? 0}',
+      );
       _runtime.evaluate('__httpResolve($id, ${jsonEncode(env)})');
     } catch (e) {
+      LogService.instance.warning(
+        'SourceNet',
+        '音源外联失败',
+        detail: '源 $sourceId · $method $target\n$e',
+      );
       _runtime.evaluate('__httpReject($id, ${jsonEncode(e.toString())})');
     }
+  }
+
+  /// 审计用目标描述:去掉 query 与 fragment,只保留 scheme/host/path。
+  String _describeTarget(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null || !uri.hasScheme || uri.host.isEmpty) return '<非法地址>';
+    return '${uri.scheme}://${uri.host}${uri.path}';
   }
 
   // ── result 通道:音源方法调用结果 ──

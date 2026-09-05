@@ -12,6 +12,7 @@ import 'log_service.dart';
 import 'progress_service.dart';
 import 'settings_service.dart';
 import 'shelf_service.dart';
+import 'secure_store.dart';
 import 'webdav_service.dart';
 
 /// 数据同步专用的 WebDAV 服务器配置。
@@ -236,6 +237,9 @@ class WebDavSyncService extends ChangeNotifier {
   static const _kLastResult = 'sync_last_result';
   static const _kDeviceTag = 'sync_device_tag';
   static const _kConfig = 'sync_webdav_config';
+  // 同步密码与服务器配置的加密存储键;明文旧键由 SecureStore 迁移后删除。
+  static const _kPasswordSecure = 'sec.sync_password';
+  static const _kConfigSecure = 'sec.sync_webdav_config';
 
   static const defaultRemoteDir = '/JuTingSync';
 
@@ -302,8 +306,10 @@ class WebDavSyncService extends ChangeNotifier {
       password: config.password,
       remoteDir: _normalizeRemoteDir(config.remoteDir),
     );
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kConfig, jsonEncode(_config.toJson()));
+    await SecureStore.instance.write(
+      _kConfigSecure,
+      jsonEncode(_config.toJson()),
+    );
     LogService.instance.info(
       'Sync',
       '同步服务器配置已保存',
@@ -315,11 +321,18 @@ class WebDavSyncService extends ChangeNotifier {
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     _enabled = prefs.getBool(_kEnabled) ?? false;
-    _password = prefs.getString(_kPassword) ?? '';
+    _password = await SecureStore.instance.readMigrated(
+      _kPassword,
+      _kPasswordSecure,
+    ) ??
+    '';
     _lastSyncAt = prefs.getInt(_kLastSyncAt) ?? 0;
     _lastResult = prefs.getString(_kLastResult) ?? '';
     _deviceTag = prefs.getString(_kDeviceTag) ?? '';
-    final rawConfig = prefs.getString(_kConfig);
+    final rawConfig = await SecureStore.instance.readMigrated(
+      _kConfig,
+      _kConfigSecure,
+    );
     if (rawConfig != null && rawConfig.isNotEmpty) {
       try {
         _config = WebDavSyncConfig.fromJson(
@@ -339,7 +352,10 @@ class WebDavSyncService extends ChangeNotifier {
         password: book.password,
         remoteDir: defaultRemoteDir,
       );
-      await prefs.setString(_kConfig, jsonEncode(_config.toJson()));
+      await SecureStore.instance.write(
+        _kConfigSecure,
+        jsonEncode(_config.toJson()),
+      );
       LogService.instance.info(
         'Sync',
         '已从网盘书库导入 WebDAV 账号作为同步服务器',
@@ -432,8 +448,7 @@ class WebDavSyncService extends ChangeNotifier {
 
   Future<void> setPassword(String value) async {
     _password = value.trim();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kPassword, _password);
+    await SecureStore.instance.write(_kPasswordSecure, _password);
     notifyListeners();
   }
 

@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'log_service.dart';
+import 'secure_store.dart';
 
 /// Alist 账号配置：仅需一个根 URL，token 可选（guest 实例留空）。
 class AlistConfig {
@@ -90,6 +91,8 @@ class AlistService extends ChangeNotifier {
   static final instance = AlistService._();
 
   static const _kAccounts = 'alist_accounts';
+  // 账号数据(含 Token)的加密存储键;明文旧键由 SecureStore 迁移后删除。
+  static const _kAccountsSecure = 'sec.alist_accounts';
   static const _kActiveAccountId = 'alist_active_account_id';
   static const _loginChannel = MethodChannel('tingshu/source_login');
   static const audioExtensions = {
@@ -120,7 +123,10 @@ class AlistService extends ChangeNotifier {
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_kAccounts);
+    final raw = await SecureStore.instance.readMigrated(
+      _kAccounts,
+      _kAccountsSecure,
+    );
     if (raw == null || raw.isEmpty) return;
     try {
       final rows = jsonDecode(raw) as List;
@@ -191,8 +197,8 @@ class AlistService extends ChangeNotifier {
 
   Future<void> _persist() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _kAccounts,
+    await SecureStore.instance.write(
+      _kAccountsSecure,
       jsonEncode(_accounts.map((account) => account.toJson()).toList()),
     );
     await prefs.setString(_kActiveAccountId, _config.id);

@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xml/xml.dart';
 
 import 'log_service.dart';
+import 'secure_store.dart';
 
 class WebDavBookMeta {
   final String title;
@@ -102,6 +103,8 @@ class WebDavService extends ChangeNotifier {
 
   static const _kConfig = 'webdav_config';
   static const _kAccounts = 'webdav_accounts';
+  // 账号数据(含密码)的加密存储键;明文旧键由 SecureStore 迁移后删除。
+  static const _kAccountsSecure = 'sec.webdav_accounts';
   static const _kActiveAccountId = 'webdav_active_account_id';
   static const audioExtensions = {
     '.mp3',
@@ -131,7 +134,10 @@ class WebDavService extends ChangeNotifier {
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
-    final accountsRaw = prefs.getString(_kAccounts);
+    final accountsRaw = await SecureStore.instance.readMigrated(
+      _kAccounts,
+      _kAccountsSecure,
+    );
     try {
       if (accountsRaw != null && accountsRaw.isNotEmpty) {
         final rows = jsonDecode(accountsRaw) as List;
@@ -228,12 +234,13 @@ class WebDavService extends ChangeNotifier {
 
   Future<void> _persistAccounts() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _kAccounts,
+    await SecureStore.instance.write(
+      _kAccountsSecure,
       jsonEncode(_accounts.map((account) => account.toJson()).toList()),
     );
     await prefs.setString(_kActiveAccountId, _config.id);
-    await prefs.setString(_kConfig, jsonEncode(_config.toJson()));
+    // 账号本体已迁入加密存储,清掉旧版明文镜像,避免密码残留明文。
+    await prefs.remove(_kConfig);
   }
 
   WebDavConfig _normalizeConfig(WebDavConfig config) {

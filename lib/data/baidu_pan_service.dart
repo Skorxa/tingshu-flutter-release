@@ -5,9 +5,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path_util;
 import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'log_service.dart';
+import 'secure_store.dart';
 
 class BaiduPanItem {
   final String name;
@@ -85,6 +85,8 @@ class BaiduPanService extends ChangeNotifier {
   static final instance = BaiduPanService._();
 
   static const _kConfig = 'baidu_pan_config';
+  // 配置(含登录 Cookie)的加密存储键;明文旧键由 SecureStore 迁移后删除。
+  static const _kConfigSecure = 'sec.baidu_pan_config';
   static const _pcUa =
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
       '(KHTML, like Gecko) Chrome/81.0.4044.138 Safari/537.36';
@@ -116,8 +118,10 @@ class BaiduPanService extends ChangeNotifier {
   bool get ready => _cookie.isNotEmpty;
 
   Future<void> init() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_kConfig);
+    final raw = await SecureStore.instance.readMigrated(
+      _kConfig,
+      _kConfigSecure,
+    );
     if (raw == null || raw.isEmpty) return;
     try {
       final map = jsonDecode(raw) as Map<String, dynamic>;
@@ -129,9 +133,8 @@ class BaiduPanService extends ChangeNotifier {
   }
 
   Future<void> _persist() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _kConfig,
+    await SecureStore.instance.write(
+      _kConfigSecure,
       jsonEncode({'cookie': _cookie, 'rootPath': _rootPath}),
     );
   }
