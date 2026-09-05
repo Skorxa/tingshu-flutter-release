@@ -174,6 +174,7 @@ class _SourceSwitchScreenState extends State<SourceSwitchScreen> {
         sourceId: widget.sourceId,
         bookId: widget.bookId,
       );
+      if (!mounted) return;
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
