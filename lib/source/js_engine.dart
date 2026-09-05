@@ -89,6 +89,34 @@ class JsEngine {
             keyEncoding: '${args['keyEncoding'] ?? 'base64'}',
             nonceEncoding: '${args['nonceEncoding'] ?? 'base64'}',
           );
+        case 'aesGcmEncrypt':
+          plainText = SourceCrypto.aesGcmEncrypt(
+            plainText: '${args['plainText'] ?? ''}',
+            key: '${args['key'] ?? ''}',
+            iv: '${args['iv'] ?? ''}',
+            plainEncoding: '${args['plainEncoding'] ?? 'utf8'}',
+            keyEncoding: '${args['keyEncoding'] ?? 'hex'}',
+            ivEncoding: '${args['ivEncoding'] ?? 'hex'}',
+            outputEncoding: '${args['outputEncoding'] ?? 'hex'}',
+          );
+        case 'sm4EcbEncrypt':
+          plainText = SourceCrypto.sm4EcbEncrypt(
+            plainText: '${args['plainText'] ?? ''}',
+            key: '${args['key'] ?? ''}',
+            plainEncoding: '${args['plainEncoding'] ?? 'utf8'}',
+            keyEncoding: '${args['keyEncoding'] ?? 'hex'}',
+            outputEncoding: '${args['outputEncoding'] ?? 'base64'}',
+          );
+        case 'sha256Hex':
+          plainText = SourceCrypto.sha256Hex(
+            text: '${args['text'] ?? ''}',
+            inputEncoding: '${args['inputEncoding'] ?? 'utf8'}',
+          );
+        case 'md5Hex':
+          plainText = SourceCrypto.md5Hex(
+            text: '${args['text'] ?? ''}',
+            inputEncoding: '${args['inputEncoding'] ?? 'utf8'}',
+          );
         default:
           throw ArgumentError('不支持的加密操作: $operation');
       }

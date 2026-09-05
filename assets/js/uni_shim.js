@@ -83,6 +83,74 @@ var uni = {
           nonceEncoding: opts.nonceEncoding || 'base64'
         }));
       });
+    },
+    // AES-256-GCM 加密:返回 IV(12B) || 密文 || TAG(16B) 的编码字符串(iv 缺省时自动随机)
+    aesGcmEncrypt: function (opts) {
+      opts = opts || {};
+      return new Promise(function (resolve, reject) {
+        var id = ++__cryptoSeq;
+        __cryptoCbs[id] = { resolve: resolve, reject: reject };
+        sendMessage('crypto', JSON.stringify({
+          id: id,
+          sourceId: __currentCallSourceId,
+          operation: 'aesGcmEncrypt',
+          plainText: opts.plainText || '',
+          key: opts.key || '',
+          iv: opts.iv || '',
+          plainEncoding: opts.plainEncoding || 'utf8',
+          keyEncoding: opts.keyEncoding || 'hex',
+          ivEncoding: opts.ivEncoding || 'hex',
+          outputEncoding: opts.outputEncoding || 'hex'
+        }));
+      });
+    },
+    // SM4-ECB 加密(PKCS7 填充),密钥 16 字节
+    sm4EcbEncrypt: function (opts) {
+      opts = opts || {};
+      return new Promise(function (resolve, reject) {
+        var id = ++__cryptoSeq;
+        __cryptoCbs[id] = { resolve: resolve, reject: reject };
+        sendMessage('crypto', JSON.stringify({
+          id: id,
+          sourceId: __currentCallSourceId,
+          operation: 'sm4EcbEncrypt',
+          plainText: opts.plainText || '',
+          key: opts.key || '',
+          plainEncoding: opts.plainEncoding || 'utf8',
+          keyEncoding: opts.keyEncoding || 'hex',
+          outputEncoding: opts.outputEncoding || 'base64'
+        }));
+      });
+    },
+    // SHA-256 摘要,返回 hex
+    sha256Hex: function (opts) {
+      opts = opts || {};
+      return new Promise(function (resolve, reject) {
+        var id = ++__cryptoSeq;
+        __cryptoCbs[id] = { resolve: resolve, reject: reject };
+        sendMessage('crypto', JSON.stringify({
+          id: id,
+          sourceId: __currentCallSourceId,
+          operation: 'sha256Hex',
+          text: opts.text || opts.data || '',
+          inputEncoding: opts.inputEncoding || 'utf8'
+        }));
+      });
+    },
+    // MD5 摘要,返回 hex
+    md5Hex: function (opts) {
+      opts = opts || {};
+      return new Promise(function (resolve, reject) {
+        var id = ++__cryptoSeq;
+        __cryptoCbs[id] = { resolve: resolve, reject: reject };
+        sendMessage('crypto', JSON.stringify({
+          id: id,
+          sourceId: __currentCallSourceId,
+          operation: 'md5Hex',
+          text: opts.text || opts.data || '',
+          inputEncoding: opts.inputEncoding || 'utf8'
+        }));
+      });
     }
   },
   getStorageSync: function (k) {
