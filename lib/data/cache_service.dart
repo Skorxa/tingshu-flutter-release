@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../source/source_manager.dart';
+import 'alist_service.dart';
 import 'baidu_pan_service.dart';
 import 'catalog_cache_service.dart';
 import 'db.dart';
@@ -746,6 +747,14 @@ class CacheService extends ChangeNotifier {
     if (audioUrl.isEmpty && chapterId.startsWith('quark:')) {
       final audio = await QuarkPanService.instance.resolveAudio(
         chapterId.substring('quark:'.length),
+      );
+      audioUrl = audio.url;
+      audioHeaders = audio.headers;
+    }
+    if (audioUrl.isEmpty && chapterId.startsWith('alist:')) {
+      // AList 懒解析:与播放器一致,缓存到哪章才解析哪章的直链。
+      final audio = await AlistService.instance.resolveAudio(
+        chapterId.substring('alist:'.length),
       );
       audioUrl = audio.url;
       audioHeaders = audio.headers;
