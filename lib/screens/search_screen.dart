@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:pool/pool.dart';
 
 import '../data/log_service.dart';
 import '../data/search_history_service.dart';
@@ -49,6 +50,7 @@ class _SearchScreenState extends State<SearchScreen> {
   bool _historyLoaded = false;
   List<String> _history = const [];
   String? _error;
+  Timer? _flushTimer;
 
   @override
   void initState() {
@@ -60,6 +62,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   void dispose() {
+    _flushTimer?.cancel();
     _ctrl.removeListener(_onQueryChanged);
     _resultsScrollController.removeListener(_onResultsScroll);
     _resultsScrollController.dispose();
@@ -220,7 +223,17 @@ class _SearchScreenState extends State<SearchScreen> {
       _error = null;
     });
 
-    await Future.wait(targets.map(_loadBucket));
+    // 限制聚合搜索并发,避免源数量即并发量造成网络/CPU 尖峰与风控。
+    final pool = Pool(3);
+    try {
+      await Future.wait(
+        targets.map((bucket) => pool.withResource(() => _loadBucket(bucket))),
+      );
+    } finally {
+      pool.close();
+    }
+    _flushTimer?.cancel();
+    _flushTimer = null;
     if (!mounted) return;
     setState(() {
       _loading = false;
@@ -241,7 +254,7 @@ class _SearchScreenState extends State<SearchScreen> {
         _keyword,
         page: bucket.page,
         pageSize: 20,
-      );
+      ).timeout(const Duration(seconds: 15));
       final filtered = res.list.where(_matchesSearchMode).toList();
       final existingIds = bucket.books.map((book) => book.bookId).toSet();
       bucket.books.addAll(
@@ -250,7 +263,7 @@ class _SearchScreenState extends State<SearchScreen> {
       bucket.hasMore = res.hasMore && res.page < res.maxPage;
       bucket.page = res.page + 1;
       bucket.error = null;
-      if (mounted) setState(() {});
+      _scheduleFlush();
       LogService.instance.info(
         'Search',
         '音源搜索完成',
@@ -259,15 +272,25 @@ class _SearchScreenState extends State<SearchScreen> {
       );
     } catch (e) {
       bucket.hasMore = false;
-      bucket.error =
-          '${bucket.source.name}: ${e.toString().replaceFirst('Exception: ', '')}';
-      if (mounted) setState(() {});
+      bucket.error = e is TimeoutException
+          ? '${bucket.source.name}: 搜索超时，已跳过'
+          : '${bucket.source.name}: ${e.toString().replaceFirst('Exception: ', '')}';
+      _scheduleFlush();
       LogService.instance.error(
         'Search',
         '音源搜索失败: ${bucket.source.name}',
         error: e,
       );
     }
+  }
+
+  /// 搜索结果 200ms 节流刷新:多源并发完成时避免每帧全页重排。
+  void _scheduleFlush() {
+    if (_flushTimer != null) return;
+    _flushTimer = Timer(const Duration(milliseconds: 200), () {
+      _flushTimer = null;
+      if (mounted) setState(() {});
+    });
   }
 
   bool _matchesSearchMode(Book book) {

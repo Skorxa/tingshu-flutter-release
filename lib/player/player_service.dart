@@ -55,6 +55,10 @@ class PlayerService extends ChangeNotifier {
   int _sleepRemainingChapters = 0;
   DateTime? _sleepEndAt;
   bool _isFadingOut = false;
+  // 用户主动暂停的时间点:暂停超过阈值后点播放回退 5 秒。
+  // 定时关闭淡出走 _player.pause 直调,不会设置此字段。
+  DateTime? _pausedAt;
+  static const _resumeRewindThreshold = Duration(minutes: 30);
 
   static AudioPlayer _createPlayer(bool offloadEnabled) {
     return AudioPlayer(
@@ -795,16 +799,25 @@ class PlayerService extends ChangeNotifier {
     if (_pendingResume) {
       final resumeAt = _resumePositionSeconds;
       _pendingResume = false;
+      _pausedAt = null;
       LogService.instance.info('Player', '从待续播态开始续播');
       return playIndex(currentIndex, seekTo: resumeAt);
     }
     _userWantsPlayback = true;
+    final pausedAt = _pausedAt;
+    _pausedAt = null;
     if (currentIndex >= 0 &&
         (_error != null || _processing == ProcessingState.idle)) {
       return playIndex(
         currentIndex,
         seekTo: _positionNotifier.value.inMilliseconds / 1000,
       );
+    }
+    // 长暂停后回退 5 秒起播,帮用户找回情节记忆;仅作用于用户主动暂停恢复。
+    if (pausedAt != null &&
+        DateTime.now().difference(pausedAt) >= _resumeRewindThreshold) {
+      LogService.instance.info('Player', '长暂停后回退 5 秒续播');
+      await seekBy(-5);
     }
     LogService.instance.info('Player', '继续播放');
     await _player.play();
@@ -814,6 +827,7 @@ class PlayerService extends ChangeNotifier {
   Future<void> pause() async {
     LogService.instance.info('Player', '暂停播放');
     _userWantsPlayback = false;
+    _pausedAt = DateTime.now();
     _playSeq++;
     _stablePlaybackTimer?.cancel();
     unawaited(ListeningStatsService.instance.flush());

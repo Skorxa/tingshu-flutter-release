@@ -62,6 +62,20 @@ class _RuntimeLogScreenState extends State<RuntimeLogScreen> {
             ],
           ),
           IconButton(
+            icon: const Icon(Icons.ios_share),
+            tooltip: '导出诊断报告',
+            onPressed: () async {
+              final report = LogService.instance.buildDiagnosticReport();
+              await Clipboard.setData(ClipboardData(text: report));
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('诊断报告已复制到剪贴板（已做尽力脱敏，粘贴前请再人工检查）'),
+                ),
+              );
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.delete_sweep_outlined),
             tooltip: '清空',
             onPressed: () async {
