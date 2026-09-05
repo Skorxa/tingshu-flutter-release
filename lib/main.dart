@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:audio_service/audio_service.dart';
 
@@ -54,12 +56,6 @@ Future<void> main() async {
     LogService.instance.error('Settings', '设置加载失败', error: e, stack: stack);
   }
   try {
-    await ListeningStatsService.instance.init();
-    LogService.instance.info('Stats', '听书统计加载完成');
-  } catch (e, stack) {
-    LogService.instance.error('Stats', '听书统计加载失败', error: e, stack: stack);
-  }
-  try {
     await getDb(); // 初始化数据库(建表)
     LogService.instance.info('Database', '数据库初始化完成');
   } catch (e, stack) {
@@ -85,6 +81,25 @@ Future<void> main() async {
     LogService.instance.info('Source', '音源初始化完成');
   } catch (e, stack) {
     LogService.instance.error('Source', '音源初始化失败', error: e, stack: stack);
+  }
+
+  ThemeService.instance; // 触发构造:启动封面取色监听
+  runApp(const TingshuApp());
+
+  // 非关键服务移到首帧之后初始化:收听统计与网盘/同步只在进入对应页面时才被
+  // 用到,不必挡住首帧。保持 WebDav → WebDavSync 的顺序(同步首次迁移依赖
+  // 书库 WebDAV 配置),各步骤独立捕获异常,单个失败不影响其余模块。
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    unawaited(_initDeferredServices());
+  });
+}
+
+Future<void> _initDeferredServices() async {
+  try {
+    await ListeningStatsService.instance.init();
+    LogService.instance.info('Stats', '听书统计加载完成');
+  } catch (e, stack) {
+    LogService.instance.error('Stats', '听书统计加载失败', error: e, stack: stack);
   }
   try {
     await WebDavService.instance.init();
@@ -116,9 +131,6 @@ Future<void> main() async {
   } catch (e, stack) {
     LogService.instance.error('Sync', 'WebDAV 同步服务初始化失败', error: e, stack: stack);
   }
-
-  ThemeService.instance; // 触发构造:启动封面取色监听
-  runApp(const TingshuApp());
 }
 
 class TingshuApp extends StatelessWidget {

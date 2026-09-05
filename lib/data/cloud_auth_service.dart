@@ -184,13 +184,14 @@ class CloudAuthService extends ChangeNotifier {
       _appVersion = await _readAppVersion();
       await _loadStoredAuthorization();
       if (_accessToken.isEmpty && _refreshToken.isEmpty) {
-        // 设备曾用邀请码激活过时,先尝试静默重新激活(服务端对同设备
-        // 同邀请码不消耗使用次数),失败才进入未激活状态。
-        if (!await _tryAutoReactivate()) {
-          _setState(CloudAuthState.activationRequired);
-        }
+        // 掉激活的设备先进入未激活态,后台静默重激活(同设备同邀请码
+        // 不消耗使用次数),成功后状态自动翻回已授权;不阻塞启动。
+        _setState(CloudAuthState.activationRequired);
+        unawaited(_tryAutoReactivate());
       } else {
-        await verify(allowOffline: true);
+        // 授权复验放后台执行:弱网/服务端超时不拖慢冷启动,
+        // 授权门以 checking 态承接,复验完成后状态自行流转。
+        unawaited(verify(allowOffline: true));
       }
       _timer = Timer.periodic(const Duration(minutes: 10), (_) {
         unawaited(verify(allowOffline: true, quiet: true));

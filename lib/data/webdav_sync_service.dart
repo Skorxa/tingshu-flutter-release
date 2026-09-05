@@ -471,7 +471,7 @@ class WebDavSyncService extends ChangeNotifier {
       final remoteText = await _client.getString(syncFilePath);
       Map<String, dynamic>? remote;
       if (remoteText != null && remoteText.trim().isNotEmpty) {
-        remote = _decryptEnvelope(remoteText);
+        remote = await _decryptEnvelope(remoteText);
         final payloadVersion = _asInt(remote['v']);
         if (payloadVersion > 2) {
           throw Exception('云端同步数据版本过新,请先升级 App');
@@ -482,7 +482,7 @@ class WebDavSyncService extends ChangeNotifier {
       }
       final merged = await _buildPayload();
       if (remote == null || _sortedJson(merged) != _sortedJson(remote)) {
-        final envelope = _encryptEnvelope(jsonEncode(merged));
+        final envelope = await _encryptEnvelope(jsonEncode(merged));
         await _client.putString(syncFilePath, envelope);
         _lastResult = remote == null ? '已上传本地数据' : '已合并并上传';
       } else {
@@ -525,7 +525,7 @@ class WebDavSyncService extends ChangeNotifier {
     notifyListeners();
     try {
       final payload = await _buildPayload();
-      final envelope = _encryptEnvelope(jsonEncode(payload));
+      final envelope = await _encryptEnvelope(jsonEncode(payload));
       await _client.putString(syncFilePath, envelope);
       _lastSyncAt = DateTime.now().millisecondsSinceEpoch;
       _lastResult = '已上传本地数据';
@@ -569,7 +569,7 @@ class WebDavSyncService extends ChangeNotifier {
         _lastResult = '云端还没有同步数据';
         return;
       }
-      final remote = _decryptEnvelope(remoteText);
+      final remote = await _decryptEnvelope(remoteText);
       await _applyRemote(remote);
       _lastSyncAt = DateTime.now().millisecondsSinceEpoch;
       _lastResult = '已应用云端数据';
@@ -711,11 +711,13 @@ class WebDavSyncService extends ChangeNotifier {
 
   // ── 加密 ──────────────────────────────────────────────────────────
 
-  String _encryptEnvelope(String plain) =>
-      SyncCrypto.encrypt(plain, _password);
+  // PBKDF2(5 万次迭代)+ AES + HMAC 在主 isolate 上同步执行会产生百毫秒级
+  // 卡顿,挪到 compute 后台 isolate;明文/密文均为可传输的 String/Map。
+  Future<String> _encryptEnvelope(String plain) =>
+      compute(_encryptEnvelopeJob, (plain, _password));
 
-  Map<String, dynamic> _decryptEnvelope(String envelope) =>
-      SyncCrypto.decrypt(envelope, _password);
+  Future<Map<String, dynamic>> _decryptEnvelope(String envelope) =>
+      compute(_decryptEnvelopeJob, (envelope, _password));
 
   /// 规范化 JSON(键排序),用于比较合并结果与云端数据是否一致。
   String _sortedJson(dynamic value) {
@@ -839,3 +841,10 @@ class SyncCrypto {
     return Map<String, dynamic>.from(data);
   }
 }
+
+/// compute 任务入口:必须是顶层函数。参数为 (明文或密文, 同步密码)。
+String _encryptEnvelopeJob((String, String) args) =>
+    SyncCrypto.encrypt(args.$1, args.$2);
+
+Map<String, dynamic> _decryptEnvelopeJob((String, String) args) =>
+    SyncCrypto.decrypt(args.$1, args.$2);

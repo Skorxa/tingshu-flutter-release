@@ -90,9 +90,12 @@ class ThemeService extends ChangeNotifier {
   ImageProvider _imageProvider(String rawUrl) {
     var url = rawUrl.trim();
     if (url.startsWith('//')) url = 'https:$url';
+    // 取色只需低分辨率:强制解码到 128px 宽,避免大封面全尺寸解码拖慢取色
+    ImageProvider resolve(ImageProvider inner) =>
+        ResizeImage(inner, width: 128, policy: ResizeImagePolicy.fit);
     if (url.startsWith('http://') || url.startsWith('https://')) {
-      return NetworkImage(url);
+      return resolve(NetworkImage(url));
     }
-    return FileImage(File(url));
+    return resolve(FileImage(File(url)));
   }
 }

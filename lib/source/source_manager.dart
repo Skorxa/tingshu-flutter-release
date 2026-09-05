@@ -202,7 +202,8 @@ class SourceManager {
       final subscriptionUrl = '${source['subscriptionUrl'] ?? ''}'.trim();
       return subscriptionId.isEmpty && subscriptionUrl.isEmpty;
     });
-    if (before != _stored.length) {
+    var changed = before != _stored.length;
+    if (changed) {
       _registered.removeWhere(_removedBundledIds.contains);
       if (_removedBundledIds.contains(_activeId)) _activeId = _firstEnabledId();
       LogService.instance.info(
@@ -211,13 +212,14 @@ class SourceManager {
         detail: '删除数量: ${before - _stored.length}',
       );
     }
-    _migrateLegacySubscriptionData();
-    _backfillSourceSubscriptionIds();
-    await _persist();
-
+    changed = _migrateLegacySubscriptionData() || changed;
+    changed = _backfillSourceSubscriptionIds() || changed;
     if (_activeId.isEmpty && _stored.isNotEmpty) {
       _activeId = '${_stored.first['id']}';
+      changed = true;
     }
+    // 音源 JSON 可达上百 KB,仅在数据确实变化时回写,避免每次启动白写一遍。
+    if (changed) await _persist();
     _ready = true;
     if (_subscriptions.isNotEmpty) {
       unawaited(syncAutoUpdateSubscriptions(trigger: 'startup'));
