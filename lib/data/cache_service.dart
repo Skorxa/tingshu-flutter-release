@@ -662,6 +662,9 @@ class CacheService extends ChangeNotifier {
         detail:
             '书名: ${context.bookTitle}\n范围: ${start + 1} - $end（含当前集）\n上限: ${settings.maxCacheChapters}',
       );
+      // 相同错误聚合统计:一章一刷会把环形日志淹没(曾出现每分钟 30 条相同堆栈)
+      final failureCounts = <String, int>{};
+      final failureSamples = <String, ({Object error, StackTrace stack})>{};
       for (var i = start; i < end; i++) {
         if (_authorizationSuspended) {
           LogService.instance.info('Cache', '授权不可用，停止本轮缓存');
@@ -694,12 +697,21 @@ class CacheService extends ChangeNotifier {
             onSniff: () => usedSniff = true,
           );
         } catch (e, stack) {
-          LogService.instance.error(
-            'Cache',
-            usedSniff ? '嗅探章节缓存失败，本轮停止' : '章节缓存失败，继续后续任务',
-            error: e,
-            stack: stack,
-          );
+          if (usedSniff) {
+            LogService.instance.error(
+              'Cache',
+              '嗅探章节缓存失败，本轮停止',
+              error: e,
+              stack: stack,
+            );
+          } else {
+            final key = e.toString();
+            failureCounts[key] = (failureCounts[key] ?? 0) + 1;
+            failureSamples.putIfAbsent(
+              key,
+              () => (error: e, stack: stack),
+            );
+          }
         }
         if (usedSniff) {
           LogService.instance.info(
@@ -710,6 +722,16 @@ class CacheService extends ChangeNotifier {
           break;
         }
       }
+      // 轮次结束:相同错误只输出一条,附失败章数与首个堆栈样本
+      failureCounts.forEach((key, count) {
+        final sample = failureSamples[key]!;
+        LogService.instance.error(
+          'Cache',
+          count > 1 ? '本轮缓存失败 $count 章（相同错误已合并）' : '章节缓存失败，继续后续任务',
+          error: sample.error,
+          stack: sample.stack,
+        );
+      });
       await cleanup();
     } finally {
       _syncing = false;
