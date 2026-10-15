@@ -222,9 +222,12 @@ class SettingsService extends ChangeNotifier {
       );
       await prefs.setInt(_kChangedAt, _settingsChangedAt);
     } finally {
+      // 通知必须在 _applyingRemote 仍为 true 时发出:覆写的 notifyListeners 会把
+      // _settingsChangedAt 改写成"现在",那样刚应用完远端设置的设备反而被判定为
+      // 本地最新,下一轮同步就会整块覆盖对端(跨设备互相覆盖 + 反复整包上传)。
+      notifyListeners();
       _applyingRemote = false;
     }
-    notifyListeners();
   }
 
   @override

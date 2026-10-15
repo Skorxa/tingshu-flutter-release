@@ -199,11 +199,16 @@ class ShelfService extends ChangeNotifier {
       if (existing != null && ((existing['addTime'] as int?) ?? 0) >= addTime) {
         continue;
       }
+      // 同步载荷不再携带封面(见 SyncPayload.shelfRow),这里保留本地已有封面,
+      // 避免对端记录把本机书架的封面清空。
+      final incomingCover = '${row['cover'] ?? ''}'.trim();
       batch.insert('shelf', {
         'sourceId': sourceId,
         'bookId': bookId,
         'title': '${row['title'] ?? ''}',
-        'cover': '${row['cover'] ?? ''}',
+        'cover': incomingCover.isNotEmpty
+            ? incomingCover
+            : '${existing?['cover'] ?? ''}',
         'author': '${row['author'] ?? ''}',
         'sourceName': '${row['sourceName'] ?? ''}',
         'addTime': addTime,

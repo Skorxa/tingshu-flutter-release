@@ -3,54 +3,102 @@ var ガて=(function(){var ﾌォ=!![];return function(ヸぜ,ざト){var ｸザ
 
 return ({
   id: 'legado-fanqie-official',
-  version: 1,
+  version: 2,
   name: '番茄听书[官方]',
   apiVersion: 1,
-  _ua: 'Mozilla/5.0 (Linux; Android 12; 23117RK66C Build/SKQ1.220303.001) AppleWebKit/537.36 Mobile Safari/537.36',
-  _catalogs: {},
+  author: '根据 番茄听书.json (by 咪咪喵) 移植',
+
+  // ---- 常量：与 Legado 源保持一致 --------------------------------------
+  _ua: 'com.dragon.read.oversea.gp/70132 (Linux; U; Android 9; zh_CN; Honor 10; Build/PQ3A.190801.002; Cronet/TTNetVersion:unknown)',
+  _uaWeb: 'Mozilla/5.0 (Linux; Android 12; 23117RK66C Build/SKQ1.220303.001) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/90.0.4430.91 Mobile Safari/537.36',
   _searchHost: 'https://api5-lite-sinfonlinec.novelfm.com',
-  _audioHost: 'https://api-sinfonlineb.fanqiesdk.com',
+  _exploreHost: 'https://novel.snssdk.com',
+  _detailHost: 'https://api.jxbhmy.com',
+  _playHost: 'https://reading.snssdk.com',
+  _dirHost: 'https://fanqienovel.com',
+  _catalogs: {},
+  _catalogMeta: {},
+
+  // 分类树：直接取自 番茄听书.json 的 exploreUrl（7 个父分类 / 222 个子分类）
+  _tree: [["小说",[["1","都市"],["3","现代言情"],["5","古代言情"],["261","都市日常"],["79","年代"],["7","玄幻"],["246","宫斗宅斗"],["23","种田"],["258","传统玄幻"],["91","多女主"],["12","历史"],["262","都市脑洞"],["124","都市修真"],["27","兵王"],["263","都市种田"],["265","先婚后爱"],["273","历史古代"],["26","神医"],["29","豪门总裁"],["257","玄幻脑洞"],["10","悬疑"],["1016","男频衍生"],["1140","东方仙侠"],["533","民俗秘闻"],["1014","都市高武"],["37","穿越"],["19","系统"],["520","大佬"],["259","奇幻仙侠"],["30","宠妻"],["248","玄幻言情"],["253","古言脑洞"],["267","现言脑洞"],["272","历史脑洞"],["504","抗战谍战"],["8","科幻末世"],["247","医术"],["384","无敌"],["727","七零"],["453","开局"],["86","女强"],["94","团宠"],["24","快穿"],["723","下山"],["36","重生"],["718","动漫衍生"],["584","道士"],["746","游戏体育"],["2","都市生活"],["275","双男主"],["119","搞笑"],["32","幻想言情"],["100","灵异"],["90","天才"],["28","萌宝"],["597","爽文"],["728","八零"],["25","赘婿"],["745","星光璀璨"],["735","凡人流"],["266","马甲"],["125","家庭"],["81","盗墓"],["20","神豪"],["391","无女主"],["42","奶爸"],["68","末世"],["749","青春甜宠"],["1015","女频衍生"],["372","网游"],["537","惊悚游戏"],["269","现言日常"],["80","剑道"],["536","刑侦探案"],["379","求生"],["1139","古风世情"],["57","游戏动漫"],["369","反派"],["74","宠物"],["43","娱乐圈"],["385","校花"],["88","嫡女"],["61","推理"],["16","武侠"],["1017","民国言情"],["44","空间"],["395","现言甜宠"],["487","医生"],["585","女配"],["15","体育"],["392","无CP"],["725","永生"],["82","学霸"],["378","女帝"],["96","甜宠"],["1141","西方奇幻"],["535","鬼故事"],["4","校园"],["39","二次元"],["69","直播"],["75","外卖"],["592","王爷"],["737","大叔"],["83","公主"],["590","替嫁"],["17","鉴宝"],["704","双女主"],["388","女扮男装"],["71","诸天万界"],["70","无限流"],["85","王妃"],["77","星际"],["375","特种兵"],["734","吞噬"],["591","太子"],["72","兽世"],["67","三国"],["589","法医"],["729","捡漏"],["587","村花"],["249","古言萌宝"],["582","丧尸"],["514","灵气复苏"],["66","洪荒"],["31","其他"],["40","海岛"],["516","都市异能"],["724","召唤"],["719","天道"],["92","腹黑"],["731","封神"],["492","将军"],["382","穿书"],["45","影视小说"],["368","火影"],["444","影视原声"],["383","九叔"],["390","民国"],["507","谍战"],["394","古言甜宠"],["76","清穿"],["588","地府"],["613","御兽"],["367","奥特同人"],["380","病娇"],["78","美食"],["381","聊天群"],["376","龙珠"],["89","精灵"],["95","虐文"],["387","青梅竹马"],["84","皇后"],["518","特工"],["374","漫威"],["373","西游"],["498","皇帝"],["73","大唐"],["127","职场"],["557","逃荒"],["466","闪婚"],["493","钓鱼"],["126","明朝"],["377","大秦"]]],["相声评书",[["110","评书"],["201","单田芳"],["202","刘兰芳"],["111","相声"],["204","袁阔成"],["203","田连元"],["114","小品"]]],["历史",[["207","名人传"],["213","近现代"],["212","中国史"],["206","战争史"],["211","明清"],["356","其他历史"],["210","唐宋"],["209","魏晋南北朝"],["208","秦汉"],["214","世界史"]]],["文化",[["562","大案纪实"],["116","国学"],["118","文化"],["132","名著解读"],["115","佛学"],["353","民间故事"],["237","社科"],["133","纪录"],["236","散文戏剧"],["135","哲学"],["354","其他人文"],["352","读书书评"],["136","自然科学"],["134","艺术"]]],["学习成长",[["239","励志成功"],["144","沟通表达"],["335","未解谜团"],["143","投资理财"],["147","考试培训"],["145","职业职场"],["153","中考"],["238","经管商业"],["146","心理"],["142","法律"],["154","小升初"],["341","其他成长"]]],["情感",[["229","情感故事"],["234","婚姻"],["233","心理健康"],["232","夜话"],["231","女性"],["230","美文"]]],["亲子",[["220","儿童文学"],["225","胎教早教"],["365","其他亲子"],["223","科普"],["224","国学历史"],["130","儿童歌曲"],["131","儿童成长"],["222","儿童英语"],["228","亲子健康"],["227","孕产健康"]]]],
+  _tags: ["novel","opera","history","culture","study","emotion","parentage"],
+
+  // ---- 工具方法 --------------------------------------------------------
   _sign(url, body) {
-    return fanqieSignHeaders(url, body)
+    try { return fanqieSignHeaders(url, body || null) } catch (e) { return {} }
   },
 
   _request(url, options) {
     const opts = options || {}
+    const method = String(opts.method || 'GET').toUpperCase()
     return new Promise((resolve, reject) => {
+      let finalUrl = url
+      let body = null
+      if (method === 'GET') {
+        // QuickJS 环境无 URLSearchParams，手工拼接查询串
+        if (opts.data != null) {
+          const parts = []
+          const src = opts.data
+          Object.keys(src).forEach(function (k) {
+            const v = src[k]
+            if (v != null) parts.push(encodeURIComponent(k) + '=' + encodeURIComponent(String(v)))
+          })
+          if (parts.length) finalUrl += (finalUrl.indexOf('?') >= 0 ? '&' : '?') + parts.join('&')
+        }
+      } else if (opts.data != null) {
+        body = typeof opts.data === 'string' ? opts.data : JSON.stringify(opts.data)
+      }
       uni.request({
-        url,
-        method: opts.method || 'GET',
-        data: opts.data || null,
-        header: Object.assign({
-          'User-Agent': this._ua,
-          Accept: 'application/json, text/plain, */*'
-        }, opts.headers || {}),
+        url: finalUrl,
+        method,
+        data: body,
+        header: Object.assign({ 'User-Agent': this._ua }, opts.headers || {}),
         timeout: opts.timeout || 30000,
         success: r => {
           if (r.statusCode < 200 || r.statusCode >= 300) {
-            reject(new Error('HTTP ' + r.statusCode + ' | ' + url))
+            reject(new Error('HTTP ' + r.statusCode + ' | ' + finalUrl))
             return
           }
-          resolve(this._json(r.data))
+          resolve(r.data)
         },
-        fail: e => reject(new Error(e.errMsg || '网络失败'))
+        fail: e => reject(new Error((e && e.errMsg) || '网络请求失败'))
       })
     })
   },
 
+  _text(value) {
+    if (value == null) return ''
+    if (typeof value === 'string') return value
+    return String(value)
+  },
+
   _json(value) {
     if (value && typeof value === 'object') return value
-    try { return JSON.parse(String(value || '')) } catch (e) {
+    const text = this._text(value)
+    if (!text) return {}
+    try { return JSON.parse(text) } catch (e) {
       throw new Error('接口返回的不是有效 JSON')
     }
   },
 
   _clean(value) {
-    return String(value || '')
-      .replace(/<[^>]+>/g, '')
+    return this._text(value)
+      .replace(/<[^>]*>/g, '')
       .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
       .replace(/\s+/g, ' ')
       .trim()
+  },
+
+  // 番茄图片域名带防盗链签名，统一升级 https
+  _image(value) {
+    let url = this._clean(value)
+    if (!url) return ''
+    if (url.indexOf('//') === 0) url = 'https:' + url
+    else if (/^http:\/\//i.test(url)) url = url.replace(/^http:/i, 'https:')
+    return url
   },
 
   _pack(value) {
@@ -58,71 +106,108 @@ return ({
   },
 
   _unpack(value) {
-    try { return JSON.parse(decodeURIComponent(String(value || ''))) } catch (e) {
-      return { id: String(value || '') }
+    try { return JSON.parse(decodeURIComponent(this._text(value))) } catch (e) {
+      return { id: this._text(value) }
     }
   },
 
-  _flattenChapters(value, output) {
-    if (Array.isArray(value)) {
-      value.forEach(item => this._flattenChapters(item, output))
-      return
+  // ---- 搜索 ------------------------------------------------------------
+  // 对应 JSON 的 searchUrl：POST novelfm bookmall/search/page/v1
+  async _searchRaw(keyword, offset, limit) {
+    const url = this._searchHost +
+      '/novelfm/bookmall/search/page/v1/?aid=3040&update_version_code=65432&device_platform=android'
+    const body = JSON.stringify({ query: keyword, offset: offset, limit: limit, tab_type: 2 })
+    const headers = Object.assign(
+      { 'Content-Type': 'application/json; charset=utf-8' },
+      this._sign(url, body)
+    )
+    const raw = await this._request(url, { method: 'POST', data: body, headers })
+    return this._json(raw)
+  },
+
+  // 对应 ruleSearch.bookList：把 data.search_data[].books 拍平
+  _searchBooks(res) {
+    const data = (res && res.data) || {}
+    const groups = Array.isArray(data.search_data) ? data.search_data : []
+    const rows = []
+    for (let i = 0; i < groups.length; i++) {
+      const g = groups[i]
+      if (g && Array.isArray(g.books)) {
+        for (let j = 0; j < g.books.length; j++) rows.push(g.books[j])
+      }
     }
-    if (!value || typeof value !== 'object') return
-    if (value.itemId || value.item_id) {
-      output.push(value)
-      return
+    return { rows, hasMore: data.has_more === true, nextOffset: Number(data.next_offset || 0) || 0 }
+  },
+
+  // 对应 ruleSearch 字段映射
+  _searchMap(item) {
+    const id = this._text(item.book_id || item.series_id)
+    if (!id) return null
+    // name: book_name || $..series_title##（别名：.*?）
+    let title = this._clean(item.book_name)
+    if (!title) title = this._clean(item.series_title).replace(/（别名：.*?）/g, '')
+    if (!title) title = this._clean(item.original_book_name)
+    if (!title) return null
+    const serial = Number(item.serial_count || item.audio_serial_count || 0) || 0
+    // wordCount: {{$.secondary_info_list[0].content}} -> 完结状态
+    const sec = Array.isArray(item.secondary_info_list) ? item.secondary_info_list : []
+    const status = sec.length ? this._clean(sec[0].content) : ''
+    const finished = this._text(item.creation_status) === '0' ||
+      status.indexOf('完结') >= 0 ||
+      (item.decision_infos && item.decision_infos.creation_status === '完结')
+    const author = this._clean(item.author || item.anchor || item.actors)
+    // kind: tags
+    let kind = this._clean(item.tags)
+    if (!kind && Array.isArray(item.category_tags)) {
+      kind = item.category_tags.map(t => this._clean(t.CategoryName || t.category_name)).filter(Boolean).join(',')
     }
-    Object.keys(value).forEach(key => this._flattenChapters(value[key], output))
+    if (!kind) kind = this._clean(item.category)
+    return {
+      id,
+      title,
+      author,
+      cover: this._image(item.thumb_url || item.audio_thumb_uri || item.thumb_pic),
+      intro: this._clean(item.abstract || item.sub_abstract),
+      serial,
+      finished,
+      kind
+    }
+  },
+
+  _toBook(row) {
+    return {
+      bookId: this._pack({
+        id: row.id,
+        t: row.title,
+        c: row.cover,
+        a: row.author,
+        n: row.serial,
+        f: row.finished,
+        k: row.kind
+      }),
+      title: row.title,
+      cover: row.cover,
+      author: row.author + (row.serial ? ' · 共' + row.serial + '集' : ''),
+      intro: row.intro
+    }
   },
 
   async search(keyword, page = 1, pageSize = 20) {
+    const key = this._clean(keyword)
     const safePage = Math.max(1, Number(page) || 1)
     const limit = Math.max(1, Math.min(Number(pageSize) || 20, 50))
     const offset = (safePage - 1) * limit
-    const params = [
-      'device_platform=android',
-      'os=android',
-      'aid=3040',
-      'app_name=novel_fm',
-      'version_code=652',
-      'version_name=6.5.2.32',
-      '_rticket=' + Date.now()
-    ].join('&')
-    const url = this._searchHost + '/novelfm/bookmall/search/page/v1/?' + params
-    const body = JSON.stringify({ query: keyword, offset, limit, tab_type: 2 })
-    const res = await this._request(url, {
-      method: 'POST',
-      data: body,
-      headers: Object.assign({ 'Content-Type': 'application/json; charset=utf-8' }, this._sign(url, body))
-    })
-    const data = res && res.data ? res.data : {}
-    const groups = Array.isArray(data.search_data) ? data.search_data : []
-    const rows = []
-    groups.forEach(group => {
-      if (group && Array.isArray(group.books)) rows.push.apply(rows, group.books)
-    })
+    const res = await this._searchRaw(key, offset, limit)
+    const parsed = this._searchBooks(res)
     const seen = {}
     const list = []
-    rows.forEach(item => {
-      const id = String(item.book_id || item.series_id || '')
-      const title = this._clean(item.book_name || item.series_title || item.original_book_name)
-      if (!id || !title || seen[id]) return
-      seen[id] = true
-      const author = this._clean(item.author || item.anchor || item.actors)
-      const cover = String(item.thumb_url || item.audio_thumb_uri || item.thumb_pic || '')
-      const intro = this._clean(item.abstract || item.sub_abstract || '')
-      const finished = String(item.creation_status) === '0' ||
-        (item.decision_infos && item.decision_infos.creation_status === '完结')
-      list.push({
-        bookId: this._pack({ id, t: title, c: cover, a: author, n: Number(item.serial_count || 0) || 0, f: finished }),
-        title,
-        cover,
-        author: author + (item.serial_count ? ' · 共' + item.serial_count + '集' : ''),
-        intro
-      })
+    parsed.rows.forEach(item => {
+      const row = this._searchMap(item)
+      if (!row || seen[row.id]) return
+      seen[row.id] = true
+      list.push(this._toBook(row))
     })
-    const hasMore = data.has_more === true
+    const hasMore = parsed.hasMore && list.length > 0
     return {
       list,
       page: safePage,
@@ -131,70 +216,252 @@ return ({
     }
   },
 
+  // ---- 发现页 ----------------------------------------------------------
+  // 对应 JSON 的 exploreUrl：new_category/book_list/v1
+  async _explore(categoryId, tag, offset, limit) {
+    const url = this._exploreHost + '/api/novel/channel/homepage/new_category/book_list/v1/'
+    const query = {
+      sdk_type: 2,
+      from_scene: 201,
+      parent_category_tag: tag,
+      device_platform: 'android',
+      os: 'android',
+      ssmix: 'a',
+      aid: 13,
+      app_name: 'news_article_lite',
+      version_code: 160900,
+      version_name: '16.9.0',
+      manifest_version_code: 16900,
+      update_version_code: 169006,
+      language: 'zh',
+      os_api: 32,
+      os_version: 12,
+      ac: 'wifi',
+      limit: limit,
+      offset: offset,
+      category_id: categoryId
+    }
+    const raw = await this._request(url, { data: query })
+    return this._json(raw)
+  },
+
+  _exploreMap(item) {
+    const id = this._text(item.book_id || item.series_id)
+    if (!id) return null
+    const title = this._clean(item.book_name || item.series_title)
+    if (!title) return null
+    let kind = ''
+    if (Array.isArray(item.category_tags)) {
+      kind = item.category_tags
+        .map(t => this._clean(t.CategoryName || t.category_name))
+        .filter(Boolean)
+        .slice(0, 3)
+        .join(',')
+    }
+    return {
+      id,
+      title,
+      author: '',
+      cover: this._image(item.thumb_url || item.audio_thumb_uri),
+      intro: this._clean(item.abstract),
+      serial: 0,
+      finished: String(item.creation_status) === '0',
+      kind
+    }
+  },
+
   async discover() {
-    const categories = ['热门', '都市', '现代言情', '古代言情', '玄幻', '历史', '悬疑灵异', '科幻末世', '青春校园', '职场商战', '种田', '宫斗宅斗']
-    const loaded = new Array(categories.length)
-    let next = 0
+    const groups = this._tree
+    const sections = new Array(groups.length)
+    let cursor = 0
     const worker = async () => {
-      while (next < categories.length) {
-        const index = next++
-        const title = categories[index]
+      while (cursor < groups.length) {
+        const index = cursor++
+        const group = groups[index]
+        const tag = this._tags[index] || 'novel'
         try {
-          const res = await this.search(title === '热门' ? '' : title, 1, 8)
-          if (res.list && res.list.length) loaded[index] = { title, list: res.list.slice(0, 8) }
+          const res = await this._explore(group[1][0][0], tag, 0, 20)
+          const data = (res && res.data) || {}
+          const rows = Array.isArray(data.data) ? data.data : []
+          const seen = {}
+          const list = []
+          rows.forEach(item => {
+            const row = this._exploreMap(item)
+            if (!row || seen[row.id]) return
+            seen[row.id] = true
+            list.push(this._toBook(row))
+          })
+          if (list.length) sections[index] = { title: group[0], list: list.slice(0, 12) }
         } catch (e) {}
       }
     }
     await Promise.all([worker(), worker(), worker()])
-    return { sections: loaded.filter(Boolean) }
+    return { sections: sections.filter(Boolean) }
   },
 
-  async _loadCatalog(meta) {
-    const cacheKey = String(meta.id || '')
-    if (this._catalogs[cacheKey]) return this._catalogs[cacheKey]
-    const url = 'https://fanqienovel.com/api/reader/directory/detail?bookId=' +
-      encodeURIComponent(cacheKey)
-    const res = await this._request(url, {
-      headers: { Referer: 'https://fanqienovel.com/' }
+  // 分类下钻：JSON 每个子分类一个 exploreUrl，这里作为 search 的补充入口
+  async discoverCategory(categoryId, page = 1, pageSize = 20) {
+    const cid = String(categoryId || '').replace(/[^0-9]/g, '')
+    if (!cid) throw new Error('番茄分类 ID 为空')
+    const safePage = Math.max(1, Number(page) || 1)
+    const limit = Math.max(1, Math.min(Number(pageSize) || 20, 50))
+    // 从分类树反查所属父分类 tag
+    let tag = 'novel'
+    this._tree.forEach((group, i) => {
+      group[1].forEach(pair => { if (pair[0] === cid) tag = this._tags[i] || 'novel' })
     })
-    const data = res && res.data ? res.data : {}
+    const res = await this._explore(cid, tag, (safePage - 1) * limit, limit)
+    const data = (res && res.data) || {}
+    const rows = Array.isArray(data.data) ? data.data : []
+    const seen = {}
+    const list = []
+    rows.forEach(item => {
+      const row = this._exploreMap(item)
+      if (!row || seen[row.id]) return
+      seen[row.id] = true
+      list.push(this._toBook(row))
+    })
+    const hasMore = Number(data.has_more || 0) === 1
+    return { list, page: safePage, maxPage: hasMore ? safePage + 1 : safePage, hasMore }
+  },
+
+  // ---- 书籍详情（对应 ruleBookInfo.tocUrl 之外的 multi-detail）---------
+  async _bookInfo(bookId) {
+    const url = this._detailHost + '/reading/bookapi/multi-detail/v/' +
+      '?aid=13&iid=1&version_code=999&book_id=' + encodeURIComponent(bookId)
+    const headers = this._sign(url, null)
+    const raw = await this._request(url, { headers })
+    const res = this._json(raw)
+    const rows = Array.isArray(res && res.data) ? res.data : []
+    const info = rows[0] || {}
+    return {
+      title: this._clean(info.original_book_name || info.book_name),
+      author: this._clean(info.author),
+      cover: this._image(info.thumb_url),
+      intro: this._clean(info.abstract),
+      kind: this._clean(info.category),
+      score: this._text(info.score),
+      wordCount: Number(info.word_number || 0) || 0,
+      lastChapter: this._clean(info.last_chapter_title),
+      status: this._text(info.creation_status)
+    }
+  },
+
+  // ---- 目录 ------------------------------------------------------------
+  // 对应 ruleToc：$.data.chapterListWithVolume[*].*
+  async _loadCatalog(bookId) {
+    if (this._catalogs[bookId]) return this._catalogs[bookId]
+    const url = this._dirHost + '/api/reader/directory/detail?bookId=' + encodeURIComponent(bookId)
+    const raw = await this._request(url, { headers: { Referer: this._dirHost + '/', 'User-Agent': this._uaWeb } })
+    const res = this._json(raw)
+    const data = (res && res.data) || {}
+    const volumes = Array.isArray(data.chapterListWithVolume) ? data.chapterListWithVolume : []
     const chapters = []
-    this._flattenChapters(data.chapterListWithVolume || data.allItemIds || [], chapters)
-    if (!chapters.length) throw new Error('番茄目录为空')
-    this._catalogs[cacheKey] = chapters
+    volumes.forEach(volume => {
+      if (!Array.isArray(volume)) return
+      volume.forEach(ch => {
+        const itemId = this._text(ch.itemId || ch.item_id)
+        if (!itemId) return
+        chapters.push({
+          itemId,
+          title: this._clean(ch.title),
+          needPay: Number(ch.needPay || 0) || 0,
+          locked: ch.isChapterLock === true,
+          paid: ch.isPaidPublication === true || ch.isPaidStory === true,
+          passAt: Number(ch.firstPassTime || 0) || 0
+        })
+      })
+    })
+    // 兜底：仅拿到 allItemIds 时按序号命名
+    if (!chapters.length && Array.isArray(data.allItemIds)) {
+      data.allItemIds.forEach((itemId, i) => {
+        chapters.push({
+          itemId: this._text(itemId),
+          title: '第' + (i + 1) + '集',
+          needPay: 0,
+          locked: false,
+          paid: false,
+          passAt: 0
+        })
+      })
+    }
+    if (!chapters.length) throw new Error('番茄目录为空，书籍可能已下架')
+    this._catalogs[bookId] = chapters
     return chapters
+  },
+
+  _paid(chapter) {
+    if (!chapter) return false
+    if (chapter.needPay > 0) return true
+    if (chapter.locked) return true
+    if (chapter.paid) return true
+    return false
+  },
+
+  // 目录 + 详情（对应 ruleBookInfo）合并请求；详情失败不阻断目录
+  async _loadBook(meta) {
+    const id = this._text(meta.id)
+    if (!id) throw new Error('番茄书籍 ID 为空')
+    let detail = null
+    try { detail = await this._bookInfo(id) } catch (e) { detail = null }
+    const all = await this._loadCatalog(id)
+    return { id, detail, all }
   },
 
   async getChapters(bookId, page = 1, pageSize = 30) {
     const meta = this._unpack(bookId)
-    if (!meta.id) throw new Error('番茄书籍 ID 为空')
-    const all = await this._loadCatalog(meta)
-    const size = Math.max(1, Math.min(Number(pageSize) || 30, 100))
+    const id = this._text(meta.id)
+    if (!id) throw new Error('番茄书籍 ID 为空')
+    const loaded = await this._loadBook(meta)
+    const all = loaded.all
+    const detail = loaded.detail
+    const size = Math.max(1, Math.min(Number(pageSize) || 30, 200))
     const maxPage = Math.max(1, Math.ceil(all.length / size))
     const safePage = Math.max(1, Math.min(Number(page) || 1, maxPage))
     const start = (safePage - 1) * size
     const rows = all.slice(start, start + size)
+    const paidCount = all.filter(ch => this._paid(ch)).length
+    // 详情优先，搜索元数据兜底（对应 ruleBookInfo / ruleSearch 的字段映射）
+    const title = (detail && detail.title) || meta.t || ''
+    const cover = (detail && detail.cover) || meta.c || ''
+    const author = (detail && detail.author) || meta.a || ''
+    const intro = (detail && detail.intro) || meta.i || ''
+    const kind = (detail && detail.kind) || meta.k || ''
+    let extra = ''
+    if (detail) {
+      const bits = []
+      if (detail.score) bits.push(detail.score + '分')
+      if (detail.lastChapter) bits.push('最新：' + detail.lastChapter)
+      extra = bits.join(' · ')
+    }
     return {
       info: {
-        title: meta.t || '',
-        cover: meta.c || '',
-        author: meta.a || '',
+        title,
+        cover,
+        author,
+        intro: extra ? intro + '\n\n' + extra : intro,
+        kind,
         trackCount: all.length || Number(meta.n || 0) || 0,
-        isFinished: meta.f === true
+        isFinished: detail ? String(detail.status) === '0' : meta.f === true
       },
       list: rows.map((item, i) => ({
-        chapterId: this._pack({ b: String(meta.id), c: String(item.itemId || item.item_id || '') }),
+        chapterId: this._pack({ b: id, c: item.itemId }),
         index: start + i + 1,
-        name: this._clean(item.title || item.chapter_title || ('第' + (start + i + 1) + '集'))
-      })).filter(item => this._unpack(item.chapterId).c),
+        name: item.title || ('第' + (start + i + 1) + '集')
+      })),
       page: safePage,
       maxPage,
-      hasMore: safePage < maxPage
+      hasMore: safePage < maxPage,
+      // 附加信息：付费集数（协议未定义该字段，仅作扩展）
+      paidCount
     }
   },
 
+  // ---- 播放地址 --------------------------------------------------------
+  // 对应 ruleContent：GET reading/reader/audio/playinfo + fanqieSignHeaders
   _audioUrl(value) {
-    const raw = String(value || '')
+    const raw = this._clean(value)
+    if (!raw) return ''
     if (/^https?:\/\//i.test(raw)) return raw
     try {
       const decoded = atob(raw)
@@ -204,35 +471,69 @@ return ({
     }
   },
 
+  _pickAudio(body) {
+    const root = this._json(body)
+    // 形态一：{ data: [ { main_url, backup_url } ] }
+    const rows = Array.isArray(root && root.data) ? root.data : []
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i]
+      if (!row) continue
+      const direct = this._audioUrl(row.main_url || row.mainUrl || row.url || row.audio_url || row.audioUrl)
+      if (direct) return { url: direct, backup: this._audioUrl(row.backup_url || row.backupUrl) }
+      // 形态二：video_model 内嵌 video_list
+      if (row.video_model) {
+        try {
+          const model = typeof row.video_model === 'string' ? this._json(row.video_model) : row.video_model
+          const videos = Array.isArray(model && model.video_list) ? model.video_list : []
+          for (let j = 0; j < videos.length; j++) {
+            const v = videos[j] || {}
+            const u = this._audioUrl(v.main_url || v.mainUrl || v.url)
+            if (u) return { url: u, backup: this._audioUrl(v.backup_url || v.backupUrl) }
+          }
+        } catch (e) {}
+      }
+    }
+    // 形态三：顶层直接给 main_url
+    const top = root && (root.main_url || root.mainUrl || root.url || root.audio_url)
+    if (top) return { url: this._audioUrl(top), backup: '' }
+    // 形态四：video_model_infos
+    const infos = Array.isArray(root && root.video_model_infos) ? root.video_model_infos : []
+    for (let i = 0; i < infos.length; i++) {
+      const info = infos[i]
+      if (!info || !info.video_model) continue
+      try {
+        const model = typeof info.video_model === 'string' ? this._json(info.video_model) : info.video_model
+        const videos = Array.isArray(model && model.video_list) ? model.video_list : []
+        for (let j = 0; j < videos.length; j++) {
+          const u = this._audioUrl(videos[j] && videos[j].main_url)
+          if (u) return { url: u, backup: '' }
+        }
+      } catch (e) {}
+    }
+    return null
+  },
+
   async getAudioUrl(chapterId) {
     const info = this._unpack(chapterId)
-    const itemId = String(info.c || info.id || '')
+    const itemId = this._text(info.c || info.id)
     if (!itemId) throw new Error('番茄章节 ID 为空')
-    // 最新 JSON 的 ruleContent 使用 reader/audio/playinfo，不再调用旧 video_model/mget
-    const url = 'https://reading.snssdk.com/reading/reader/audio/playinfo/' +
+    const url = this._playHost + '/reading/reader/audio/playinfo/' +
       '?tone_id=0&item_ids=' + encodeURIComponent(itemId) +
       '&pv_player=-1&aid=3040&device_platform=android'
-    const res = await this._request(url, {
-      headers: Object.assign({ Referer: 'https://reading.snssdk.com/' }, this._sign(url, null))
+    const raw = await this._request(url, {
+      headers: Object.assign({ Referer: this._playHost + '/' }, this._sign(url, null))
     })
-    const root = res && res.data ? res.data : res
-    const candidates = []
-    if (Array.isArray(root)) candidates.push.apply(candidates, root)
-    if (root && Array.isArray(root.data)) candidates.push.apply(candidates, root.data)
-    if (root && Array.isArray(root.video_model_infos)) candidates.push.apply(candidates, root.video_model_infos)
-    const direct = root && (root.main_url || root.mainUrl || root.url || root.audio_url || root.audioUrl)
-    let audioUrl = this._audioUrl(direct)
-    for (const row of candidates) {
-      if (!row) continue
-      if (!audioUrl) audioUrl = this._audioUrl(row.main_url || row.mainUrl || row.url || row.audio_url || row.audioUrl)
-      let model = row
-      if (row.video_model) { try { model = this._json(row.video_model) } catch (e) { model = row } }
-      const videos = model && Array.isArray(model.video_list) ? model.video_list : []
-      const first = videos[0] || {}
-      if (!audioUrl) audioUrl = this._audioUrl(first.main_url || first.mainUrl || first.url || first.backup_url || first.backupUrl)
+    const picked = this._pickAudio(raw)
+    if (!picked || !picked.url) throw new Error('番茄音频地址为空，章节可能受限（会员/下架）')
+    return {
+      url: picked.url,
+      headers: {
+        'User-Agent': this._ua,
+        Referer: this._playHost + '/',
+        Accept: '*/*'
+      }
     }
-    if (!audioUrl) throw new Error('番茄音频地址为空，章节可能受限')
-    return { url: audioUrl, headers: { 'User-Agent': this._ua, Referer: 'https://reading.snssdk.com/', Accept: '*/*' } }
   }
 });
+
 })()

@@ -6,9 +6,11 @@ import 'package:flutter/services.dart';
 
 import '../source/source_manager.dart';
 import 'alist_service.dart';
+import 'aliyun_pan_service.dart';
 import 'baidu_pan_service.dart';
 import 'catalog_cache_service.dart';
 import 'log_service.dart';
+import 'pan115_service.dart';
 import 'quark_pan_service.dart';
 import 'shelf_service.dart';
 
@@ -125,6 +127,35 @@ class UpdateCheckService extends ChangeNotifier {
         );
       case 'alist':
         return _checkAlist(book);
+      case Pan115Service.sourceId:
+        return _checkPan(
+          book,
+          currentTotal: (await Pan115Service.instance.listPage(
+            book.bookId,
+            page: 1,
+          )).total,
+          refresh: () => Pan115Service.instance.refreshCatalog(
+            bookCid: book.bookId,
+            folderName: book.title,
+            fallbackCover: book.cover,
+            fallbackAuthor: book.author,
+          ),
+        );
+      case AliyunPanService.sourceId:
+        // 阿里云盘 list 接口不返回总数时 total 为 0,基线恒为 0,追更检查自然跳过
+        // (不会误报);后续若接口能给出总数,这里无需改动即可生效。
+        return _checkPan(
+          book,
+          currentTotal: (await AliyunPanService.instance.listPage(
+            book.bookId,
+          )).total,
+          refresh: () => AliyunPanService.instance.refreshCatalog(
+            bookFileId: book.bookId,
+            folderName: book.title,
+            fallbackCover: book.cover,
+            fallbackAuthor: book.author,
+          ),
+        );
       case 'webdav':
         return 0;
       default:

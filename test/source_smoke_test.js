@@ -59,12 +59,22 @@ global.uni = {
       headers: options.header || {},
       signal: controller.signal
     }
-    if (method !== 'GET' && options.data != null) {
+    // 与 App 引擎保持一致(GET 的 data 作为查询参数拼接,非 GET 作为请求体),
+    // 否则依赖 uni.request({url, data}) 形式传参的音源在冒烟测试里必然搜不到结果。
+    let url = options.url
+    if (method === 'GET' && options.data != null) {
+      const params = new URLSearchParams()
+      for (const [key, value] of Object.entries(options.data)) {
+        if (value != null) params.append(key, String(value))
+      }
+      const qs = params.toString()
+      if (qs) url += (url.includes('?') ? '&' : '?') + qs
+    } else if (method !== 'GET' && options.data != null) {
       init.body = typeof options.data === 'string'
         ? options.data
         : JSON.stringify(options.data)
     }
-    fetch(options.url, init)
+    fetch(url, init)
       .then(async response => {
         const text = await response.text()
         let data = text

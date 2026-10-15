@@ -79,7 +79,14 @@ class CoverImage extends StatelessWidget {
     if (cover.isEmpty) return '';
     if (cover.startsWith('//')) cover = 'https:$cover';
     if (_isNetwork(cover)) {
-      return Uri.tryParse(cover)?.toString() ?? Uri.encodeFull(cover);
+      // 注意：不能用 Uri.encodeFull —— 会把已有的 %XX 二次编码成 %25XX，
+      // 如番茄封面签名 %3D 变 %253D，CDN 直接 403。服务端 URL 已是合法转义，原样用之。
+      // 仅当存在真正非法字符（空格/中文）时才做一次轻量规范化。
+      final parsed = Uri.tryParse(cover);
+      if (parsed == null) return cover;
+      final normalized = parsed.toString();
+      if (normalized.contains('%25') && !cover.contains('%25')) return cover;
+      return normalized;
     }
     return cover;
   }

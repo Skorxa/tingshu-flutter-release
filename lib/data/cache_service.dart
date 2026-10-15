@@ -11,10 +11,12 @@ import 'package:sqflite/sqflite.dart';
 
 import '../source/source_manager.dart';
 import 'alist_service.dart';
+import 'aliyun_pan_service.dart';
 import 'baidu_pan_service.dart';
 import 'catalog_cache_service.dart';
 import 'db.dart';
 import 'log_service.dart';
+import 'pan115_service.dart';
 import 'quark_pan_service.dart';
 import 'settings_service.dart';
 import 'sniff_service.dart';
@@ -691,8 +693,11 @@ class CacheService extends ChangeNotifier {
           continue;
         }
         var usedSniff = false;
-        // 夸克 CDN 对高频取链+下载组合敏感,章节间加随机抖动降低 412 概率
-        if (context.sourceId == 'quark') {
+        // CDN 对高频取链+下载组合敏感(夸克 412 / 115 与阿里云盘同样有反盗链),
+        // 章节间加随机抖动降低被拦概率
+        if (context.sourceId == 'quark' ||
+            context.sourceId == Pan115Service.sourceId ||
+            context.sourceId == AliyunPanService.sourceId) {
           await Future<void>.delayed(
             Duration(milliseconds: 300 + _random.nextInt(500)),
           );
@@ -747,22 +752,47 @@ class CacheService extends ChangeNotifier {
     }
   }
 
-  /// 普通音频下载。夸克 CDN 的反盗链(412)针对请求头组合校验且规则由服务端
-  /// 控制,按变体逐级重试:0=完整头 → 1=去 Cookie/Origin → 2=仅 UA。
+  /// 哪些网盘源的直链需要按请求头变体降级重试(各家 CDN 反盗链规则不同)。
+  static bool _supportsHeaderVariants(String sourceId) =>
+      sourceId == 'quark' ||
+      sourceId == Pan115Service.sourceId ||
+      sourceId == AliyunPanService.sourceId;
+
+  /// 按来源选择变体实现:各家要摘掉的凭据头不同(夸克/115 是 Cookie,阿里云盘是
+  /// Authorization)。
+  static Map<String, String> _headerVariantFor(
+    String sourceId,
+    Map<String, String> headers,
+    int variant,
+  ) {
+    switch (sourceId) {
+      case Pan115Service.sourceId:
+        return Pan115Service.headerVariantHeaders(headers, variant);
+      case AliyunPanService.sourceId:
+        return AliyunPanService.headerVariantHeaders(headers, variant);
+      default:
+        return QuarkPanService.headerVariantHeaders(headers, variant);
+    }
+  }
+
+  /// 普通音频下载。夸克/115/阿里云盘的 CDN 反盗链(412/403)针对请求头组合校验
+  /// 且规则由服务端控制,按变体逐级重试:0=完整头 → 1=去凭据头 → 2=仅 UA。
   Future<Response> _downloadPlainAudio(
     String url,
     File tmp,
     Map<String, String> headers,
     String sourceId,
   ) async {
-    final variants = sourceId == 'quark' ? [0, 1, 2] : const [0];
+    final variants = _supportsHeaderVariants(sourceId)
+        ? const [0, 1, 2]
+        : const [0];
     Object? lastError;
     StackTrace? lastStack;
     for (final variant in variants) {
       try {
         final variantHeaders = variant == 0
             ? headers
-            : QuarkPanService.headerVariantHeaders(headers, variant);
+            : _headerVariantFor(sourceId, headers, variant);
         return await _dio.download(
           url,
           tmp.path,
@@ -826,6 +856,23 @@ class CacheService extends ChangeNotifier {
       // AList 懒解析:与播放器一致,缓存到哪章才解析哪章的直链。
       final audio = await AlistService.instance.resolveAudio(
         chapterId.substring('alist:'.length),
+      );
+      audioUrl = audio.url;
+      audioHeaders = audio.headers;
+    }
+    if (audioUrl.isEmpty && chapterId.startsWith(Pan115Service.chapterPrefix)) {
+      // 115 懒解析:章节只带 pick_code,缓存到哪章才取哪章的直链。
+      final audio = await Pan115Service.instance.resolveAudio(
+        chapterId.substring(Pan115Service.chapterPrefix.length),
+      );
+      audioUrl = audio.url;
+      audioHeaders = audio.headers;
+    }
+    if (audioUrl.isEmpty &&
+        chapterId.startsWith(AliyunPanService.chapterPrefix)) {
+      // 阿里云盘懒解析:章节只带 file_id,直链带签名与有效期,必须现取现用。
+      final audio = await AliyunPanService.instance.resolveAudio(
+        chapterId.substring(AliyunPanService.chapterPrefix.length),
       );
       audioUrl = audio.url;
       audioHeaders = audio.headers;

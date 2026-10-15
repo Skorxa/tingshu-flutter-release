@@ -189,9 +189,23 @@ class SourceContract {
     if (cover.isEmpty) return '';
     if (cover.startsWith('//')) cover = 'https:$cover';
     if (cover.startsWith('http://') || cover.startsWith('https://')) {
-      return Uri.encodeFull(cover);
+      // 注意：这里绝对不能用 Uri.encodeFull —— 它会把已经是百分号转义的 URL 二次编码
+      // （如番茄封面签名 x-signature=xxx%3D 会被编成 %253D，导致 CDN 返回 403）。
+      // 服务端下发的 URL 已是合法转义形式，原样返回；仅在含非法字符时做一次轻量规范化。
+      return _safeUri(cover);
     }
     return cover;
+  }
+
+  // 保留既有 %XX 转义，仅编码真正非法的字符（空格/中文等）。
+  // Uri.tryParse 不会改动已转义序列，可安全用于此场景。
+  static String _safeUri(String value) {
+    final parsed = Uri.tryParse(value);
+    if (parsed == null) return value;
+    final normalized = parsed.toString();
+    // 若规范化后把原 %XX 破坏成了 %25XX，则退回原值，保证不二次编码
+    if (normalized.contains('%25') && !value.contains('%25')) return value;
+    return normalized;
   }
 
   static int _positiveInt(Map map, String key, int fallback) {

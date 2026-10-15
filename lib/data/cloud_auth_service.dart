@@ -84,7 +84,7 @@ class CloudAuthService extends ChangeNotifier {
   static const _rawBaseUrl = String.fromEnvironment('CLOUD_CONTROL_URL');
   static const _required = bool.fromEnvironment(
     'CLOUD_CONTROL_REQUIRED',
-    defaultValue: true,
+    defaultValue: false,
   );
   static const _channel = MethodChannel('tingshu/device_identity');
   static const _accessKey = 'cloud_auth_access_token';

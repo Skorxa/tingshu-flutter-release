@@ -10,6 +10,8 @@
   apiVersion: 1,
   _site: 'https://m.i275.com',
   _ua: 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Mobile Safari/537.36',
+  _lrtsApi: 'https://fm.12311111.xyz/api/lrts/index.php',
+  _lrtsAt: 0,
   _cookies: {}, _bookCache: {}, _audioCache: {}, _queue: null, _lastReqAt: 0,
 
   _sleep(ms) { return new Promise(r => setTimeout(r, ms)) },
@@ -131,23 +133,87 @@
     }
   },
 
+  // ── 音频：站点自带 JSON 接口 api_chapter.php（需会话 Cookie）──
+  // GET /api_chapter.php?book_id=&chapter_id= → {url, title, book_title, cover, chapter_id, book_id}
+  // url 有两种：xmcdn 直链（喜马拉雅源）／ lrts$专辑#轨道#集序号#token（懒人源，站内不解析）
+  // 另：接口会在多个 CDN 后端间轮换，其中 2025.tingshijie.com 已失效（403），检测到就重试换后端
+  _badHost(u) { return /tingshijie\.com/i.test(String(u)) },
+  async _apiChapter(bookId, chapterId) {
+    await this._ensureSession()
+    let last = null
+    for (let i = 0; i < 4; i++) {
+      const r = await this._request({ url: this._site + '/api_chapter.php?book_id=' + encodeURIComponent(bookId) + '&chapter_id=' + encodeURIComponent(chapterId), referer: this._site + '/' })
+      let j = r.data
+      if (typeof j === 'string') { try { j = JSON.parse(j) } catch (e) { j = null } }
+      if (!j || j.error) return null
+      last = j
+      const u = String(j.url || '')
+      if (/^https?:\/\//i.test(u) && !this._badHost(u)) return j
+      if (u.indexOf('lrts$') === 0) return j
+      await this._sleep(500)
+    }
+    return last
+  },
+
+  // lrts$ 章节桥接：lrts$<专辑>#<轨道>#<集序号>#<token>.txt → 爱听书API 解析（同 IP 每 30 秒 1 次，源内自动等窗口）
+  async _lrtsAudio(raw) {
+    const m = String(raw).match(/^lrts\$(\d+)#(\d+)#(\d+)#/)
+    if (!m) throw new Error('无法解析该章节的懒人源标识')
+    const album = m[1], section = Number(m[3]) || 1
+    const call = async () => {
+      const wait = this._lrtsAt + 31000 - Date.now()
+      if (wait > 0) await this._sleep(wait)
+      const j = await this._request({ url: this._lrtsApi + '?act=audio&bookId=' + album + '&section=' + section + '&opType=1' })
+      this._lrtsAt = Date.now()
+      const env = (j && j.data) || {}
+      // 响应有两层：{code,msg,data:{url}}；兼容直接 {url}
+      const d = env.data || env
+      return { url: String(d.url || ''), msg: this._clean(d.error || env.msg || '') }
+    }
+    let r = await call()
+    if (!/^https?:\/\//i.test(r.url) && r.msg.indexOf('频繁') >= 0) {
+      const sec = Number((r.msg.match(/(\d+)\s*秒/) || [])[1] || 30)
+      await this._sleep((sec + 1) * 1000)
+      r = await call()
+    }
+    if (!/^https?:\/\//i.test(r.url)) throw new Error('该章节暂不可播放' + (r.msg ? '：' + r.msg : ''))
+    return r.url
+  },
+
   async getAudioUrl(chapterId) {
-    const url = String(chapterId || '')
-    if (!/\/play\/\d+\/\d+\.html/i.test(url)) throw new Error('无效的章节地址 | ' + url.slice(0, 60))
-    const hit = this._audioCache[url]
-    if (hit && Date.now() - hit.at < 240000) return hit.value
-    const html = await this._page(url, this._site + '/')
-    const audio = this._first(html, /url:\s*'([^']+)'/)
-    if (!audio) throw new Error('播放页缺少音频配置 | ' + url)
-    let value
+    const raw = String(chapterId || '')
+    if (!/\/play\/\d+\/\d+\.html/i.test(raw)) throw new Error('无效的章节地址 | ' + raw.slice(0, 60))
+    const hit = this._audioCache[raw]
+    if (hit && Date.now() - hit.at < hit.ttl) return hit.value
+    const ids = raw.match(/\/play\/(\d+)\/(\d+)\.html/i)
+    const bookId = ids[1], chapterIdPart = ids[2]
+
+    let audio = ''
+    // 通道 1：JSON 接口
+    try {
+      const j = await this._apiChapter(bookId, chapterIdPart)
+      if (j && j.url) audio = String(j.url)
+    } catch (e) {}
+    // 通道 2：播放页解析兜底
+    if (!audio) {
+      const html = await this._page(raw, this._site + '/')
+      audio = this._first(html, /url:\s*'([^']+)'/)
+    }
+    if (!audio) throw new Error('未取到音频地址 | ' + raw.slice(0, 60))
+
+    let value, ttl
     if (/^https?:\/\//i.test(audio)) {
       value = { url: audio, headers: { 'User-Agent': this._ua, Referer: this._site + '/', Accept: '*/*' } }
+      ttl = 4 * 60 * 1000
     } else if (audio.indexOf('lrts$') === 0) {
-      throw new Error('该章节为懒人听书源，275站内暂无法播放，请换其他书籍或章节')
+      const url = await this._lrtsAudio(audio)
+      value = { url, headers: { 'User-Agent': this._ua, Referer: this._site + '/' } }
+      ttl = 12 * 60 * 60 * 1000
     } else {
       value = { url: this._abs(audio), headers: { 'User-Agent': this._ua, Referer: this._site + '/' } }
+      ttl = 4 * 60 * 1000
     }
-    this._audioCache[url] = { value, at: Date.now() }
+    this._audioCache[raw] = { value, at: Date.now(), ttl }
     return value
   }
 })

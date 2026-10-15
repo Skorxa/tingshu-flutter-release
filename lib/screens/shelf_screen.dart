@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../data/alist_service.dart';
+import '../data/aliyun_pan_service.dart';
 import '../data/baidu_pan_service.dart';
 import '../data/catalog_cache_service.dart';
 import '../data/log_service.dart';
+import '../data/pan115_service.dart';
 import '../data/progress_service.dart';
 import '../data/quark_pan_service.dart';
 import '../data/background_protection_service.dart';
@@ -112,6 +114,8 @@ class _ShelfScreenState extends State<ShelfScreen>
     if (sourceId == 'baidu') return '百度网盘';
     if (sourceId == 'quark') return '夸克网盘';
     if (sourceId == 'alist') return 'Alist';
+    if (sourceId == Pan115Service.sourceId) return '115 网盘';
+    if (sourceId == AliyunPanService.sourceId) return '阿里云盘';
     return SourceManager.instance.getSourceName(sourceId);
   }
 
@@ -166,6 +170,14 @@ class _ShelfScreenState extends State<ShelfScreen>
       }
       if (sourceId == 'alist') {
         await _openAlistBook(book);
+        return;
+      }
+      if (sourceId == Pan115Service.sourceId) {
+        await _openPan115Book(book);
+        return;
+      }
+      if (sourceId == AliyunPanService.sourceId) {
+        await _openAliyunBook(book);
         return;
       }
       if (SourceManager.instance.activeId != sourceId) {
@@ -652,6 +664,92 @@ class _ShelfScreenState extends State<ShelfScreen>
     ).then((_) => _load());
   }
 
+  /// 115 / 阿里云盘共用的书架续播入口:目录缓存优先(章节 chapterId 自带
+  /// `pan115:`/`aliyun:` 占位,播放时才解析直链,所以缓存可放心复用,秒开不发请求),
+  /// 未命中才枚举网盘并由 refreshCatalog 写回目录缓存。
+  Future<void> _playPanBook({
+    required ShelfBook book,
+    required String sourceId,
+    required String label,
+    required Future<CachedCatalog> Function() refresh,
+  }) async {
+    var cached = await CatalogCacheService.instance.load(
+      sourceId: sourceId,
+      bookId: book.bookId,
+    );
+    if (cached == null || cached.chapters.isEmpty) {
+      cached = await refresh();
+    }
+    final progress = await ProgressService.instance.load(
+      sourceId: sourceId,
+      bookId: book.bookId,
+    );
+    var index = 0;
+    var seekTo = 0.0;
+    if (progress != null) {
+      final chapterId = '${progress['chapterId'] ?? ''}';
+      final savedIndex = (progress['chapterIdx'] as int?) ?? 0;
+      final matched = cached.chapters.indexWhere(
+        (chapter) => chapter.chapterId == chapterId,
+      );
+      index = matched >= 0 ? matched : savedIndex;
+      if (index < 0 || index >= cached.chapters.length) index = 0;
+      seekTo = (progress['currentTime'] as num?)?.toDouble() ?? 0;
+    }
+    PlayerService.instance.setContext(
+      sourceId: sourceId,
+      bookId: book.bookId,
+      bookTitle: cached.info.title.isNotEmpty ? cached.info.title : book.title,
+      cover: cached.info.cover.isNotEmpty ? cached.info.cover : book.cover,
+      chapters: cached.chapters.map((chapter) => chapter.toJson()).toList(),
+    );
+    await PlayerService.instance.playIndex(index, seekTo: seekTo);
+    LogService.instance.info(
+      'Shelf',
+      '从$label 书架进入播放',
+      detail: '书名: ${book.title}\n章节序号: ${index + 1}\n断点: ${seekTo.toInt()} 秒',
+    );
+    if (!mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const PlayerScreen()),
+    ).then((_) => _load());
+  }
+
+  Future<void> _openPan115Book(ShelfBook book) async {
+    final service = Pan115Service.instance;
+    if (!service.ready) throw Exception('请先登录 115 网盘');
+    await _playPanBook(
+      book: book,
+      sourceId: Pan115Service.sourceId,
+      label: '115 网盘',
+      refresh: () => service.refreshCatalog(
+        bookCid: book.bookId,
+        folderName: book.title,
+        fallbackCover: book.cover,
+        fallbackAuthor: book.author,
+      ),
+    );
+  }
+
+  Future<void> _openAliyunBook(ShelfBook book) async {
+    final service = AliyunPanService.instance;
+    if (!service.usable) {
+      throw Exception('请先登录阿里云盘（缺少 drive_id，需重新登录一次）');
+    }
+    await _playPanBook(
+      book: book,
+      sourceId: AliyunPanService.sourceId,
+      label: '阿里云盘',
+      refresh: () => service.refreshCatalog(
+        bookFileId: book.bookId,
+        folderName: book.title,
+        fallbackCover: book.cover,
+        fallbackAuthor: book.author,
+      ),
+    );
+  }
+
   Future<void> _showBookMenu(ShelfBook book) async {
     final sourceId = book.sourceId.isNotEmpty
         ? book.sourceId
@@ -682,12 +780,6 @@ class _ShelfScreenState extends State<ShelfScreen>
                 title: const Text('音源配置'),
                 onTap: () => Navigator.pop(ctx, 'config'),
               ),
-            ListTile(
-              leading: const Icon(Icons.bug_report_outlined),
-              title: const Text('调试音源'),
-              subtitle: const Text('自动跑搜索、目录、音频解析并写入日志'),
-              onTap: () => Navigator.pop(ctx, 'debug'),
-            ),
             ListTile(
               leading: const Icon(Icons.bug_report_outlined),
               title: const Text('调试音源'),

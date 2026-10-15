@@ -13,6 +13,7 @@ import 'progress_service.dart';
 import 'settings_service.dart';
 import 'shelf_service.dart';
 import 'secure_store.dart';
+import 'sync_payload.dart';
 import 'webdav_service.dart';
 
 /// 数据同步专用的 WebDAV 服务器配置。
@@ -48,6 +49,19 @@ class WebDavSyncConfig {
       );
 }
 
+/// 同步请求失败:携带 HTTP 状态码,便于上层区分限流/超额并退避。
+/// `toString()` 仍是给用户看的友好文案,与旧实现保持一致。
+class SyncDavException implements Exception {
+  SyncDavException(this.message, {this.statusCode, this.path});
+
+  final String message;
+  final int? statusCode;
+  final String? path;
+
+  @override
+  String toString() => message;
+}
+
 /// 同步专用的轻量 WebDAV 客户端:只支持读文本 / 写文本 / 建目录 / 连通性测试。
 class _SyncDavClient {
   _SyncDavClient(this._config);
@@ -60,6 +74,10 @@ class _SyncDavClient {
       sendTimeout: const Duration(seconds: 60),
     ),
   );
+
+  /// 已确认存在的远端目录。每次 PUT 都逐级 MKCOL 会让每个同步轮次多出请求,
+  /// 对按请求数计费的 WebDAV 是纯浪费,所以建过一次就记住。
+  final Set<String> _ensuredDirs = <String>{};
 
   Map<String, String> get _authHeader {
     if (_config.username.isEmpty && _config.password.isEmpty) return const {};
@@ -145,12 +163,20 @@ class _SyncDavClient {
         ),
       );
     } on DioException catch (e) {
-      throw Exception(_friendlyError(e, '下载'));
+      throw SyncDavException(
+        _friendlyError(e, '下载'),
+        statusCode: e.response?.statusCode,
+        path: path,
+      );
     }
     final status = response.statusCode ?? 0;
     if (status == 404) return null;
     if (status < 200 || status >= 300) {
-      throw Exception('WebDAV 下载失败（HTTP $status）\n路径: $path');
+      throw SyncDavException(
+        'WebDAV 下载失败（HTTP $status）\n路径: $path',
+        statusCode: status,
+        path: path,
+      );
     }
     return response.data;
   }
@@ -162,7 +188,9 @@ class _SyncDavClient {
     var current = '';
     for (final segment in segments.take(segments.length - 1)) {
       current = '$current/$segment';
-      await _mkcolLenient(current);
+      // 目录建过一次就跳过:每轮同步少一个请求。
+      if (_ensuredDirs.contains(current)) continue;
+      if (await _mkcolLenient(current)) _ensuredDirs.add(current);
     }
     final Response<List<int>> response;
     try {
@@ -177,15 +205,26 @@ class _SyncDavClient {
         ),
       );
     } on DioException catch (e) {
-      throw Exception(_friendlyError(e, '上传'));
+      throw SyncDavException(
+        _friendlyError(e, '上传'),
+        statusCode: e.response?.statusCode,
+        path: normalized,
+      );
     }
     final status = response.statusCode ?? 0;
     if (status < 200 || status >= 300) {
-      throw Exception('WebDAV 上传失败（HTTP $status）\n路径: $normalized');
+      // 远端目录可能被清理过,清空缓存让下次重新创建,避免一直 404/409。
+      if (status == 404 || status == 409) _ensuredDirs.clear();
+      throw SyncDavException(
+        'WebDAV 上传失败（HTTP $status）\n路径: $normalized',
+        statusCode: status,
+        path: normalized,
+      );
     }
   }
 
-  Future<void> _mkcolLenient(String path) async {
+  /// 返回是否已确认目录存在(成功创建或服务端明确表示已存在)。
+  Future<bool> _mkcolLenient(String path) async {
     try {
       final response = await _dio.request<String>(
         resolveUrl(path),
@@ -198,19 +237,21 @@ class _SyncDavClient {
       );
       final status = response.statusCode ?? 0;
       // 405 = 目录已存在;301/409 = 部分服务器对已存在目录的返回,继续尝试。
-      if (status >= 200 && status < 300) return;
-      if (status == 405 || status == 301 || status == 409) return;
+      if (status >= 200 && status < 300) return true;
+      if (status == 405 || status == 301 || status == 409) return true;
       LogService.instance.warning(
         'Sync',
         '创建远程目录未成功(继续尝试上传)',
         detail: '目录: $path\nHTTP $status',
       );
+      return false;
     } on DioException catch (e) {
       LogService.instance.warning(
         'Sync',
         '创建远程目录请求失败(继续尝试上传)',
         detail: '目录: $path\n${e.message ?? e.type.name}',
       );
+      return false;
     }
   }
 }
@@ -266,6 +307,11 @@ class WebDavSyncService extends ChangeNotifier {
   int _progressStamp = 0;
   bool _localDirty = false;
 
+  // 失败退避:限额型 WebDAV(免费套餐按上传流量/请求数计费)被限流或超额后必须降频,
+  // 旧实现失败后仍按最小间隔继续重试,等于持续撞同一堵墙。
+  int _consecutiveFailures = 0;
+  int _retryNotBefore = 0;
+
   Timer? _timer;
   Timer? _startupTimer;
 
@@ -275,6 +321,10 @@ class WebDavSyncService extends ChangeNotifier {
   int get lastSyncAt => _lastSyncAt;
   String get lastResult => _lastResult;
   bool get syncing => _syncing;
+
+  /// 连续失败次数与下次可尝试时间(供 UI 展示"已退避到 X")。
+  int get consecutiveFailures => _consecutiveFailures;
+  int get retryNotBefore => _retryNotBefore;
 
   /// 同步服务器是否已配置(独立于网盘书库的 WebDAV 账号)。
   bool get serverReady => _config.ready;
@@ -420,6 +470,8 @@ class WebDavSyncService extends ChangeNotifier {
     if (!_enabled || _syncing || !canSync) return;
     if (!_hasLocalChanges()) return;
     final now = DateTime.now().millisecondsSinceEpoch;
+    // 上次失败后的退避窗口内不再尝试:限流/超额时继续按最小间隔重试只会更糟。
+    if (now < _retryNotBefore) return;
     // 只有播放进度变化时降低同步频率,避免连续播放期间频繁整包上传。
     final onlyProgress =
         !_localDirty &&
@@ -481,14 +533,26 @@ class WebDavSyncService extends ChangeNotifier {
         await _applyRemote(remote);
       }
       final merged = await _buildPayload();
-      if (remote == null || _sortedJson(merged) != _sortedJson(remote)) {
+      // 比较口径剔除 updatedAt/deviceTag 这类"每次生成都不同"的字段,否则无论内容
+      // 有没有变都会判定为有差异 → 每一轮(含每次冷启动、播放中每 5 分钟)都整包 PUT。
+      if (remote == null ||
+          SyncPayload.compareKey(merged) != SyncPayload.compareKey(remote)) {
         final envelope = await _encryptEnvelope(jsonEncode(merged));
         await _client.putString(syncFilePath, envelope);
         _lastResult = remote == null ? '已上传本地数据' : '已合并并上传';
+        LogService.instance.info(
+          'Sync',
+          '同步载荷已上传',
+          detail: '大小: ${(envelope.length / 1024).toStringAsFixed(1)} KB'
+              '\n进度条数: ${(merged['progress'] as List?)?.length ?? 0}'
+              '\n触发: $reason',
+        );
       } else {
         _lastResult = '云端与本地一致';
       }
       _lastSyncAt = DateTime.now().millisecondsSinceEpoch;
+      _consecutiveFailures = 0;
+      _retryNotBefore = 0;
       _refreshStamps();
       await _persistState();
       LogService.instance.info(
@@ -497,10 +561,21 @@ class WebDavSyncService extends ChangeNotifier {
         detail: '触发: $reason\n结果: $_lastResult\n路径: $syncFilePath',
       );
     } catch (e, stack) {
-      _lastResult = '同步失败: $e';
+      _consecutiveFailures++;
+      final rateLimited = e is SyncDavException &&
+          SyncPayload.isQuotaStatus(e.statusCode);
+      final delayMs = SyncPayload.retryDelayMs(
+        _consecutiveFailures,
+        rateLimited: rateLimited,
+      );
+      _retryNotBefore = DateTime.now().millisecondsSinceEpoch + delayMs;
+      _lastResult = rateLimited
+          ? '同步被限流/额度不足,${(delayMs / 60000).round()} 分钟后再试: $e'
+          : '同步失败: $e';
       LogService.instance.error(
         'Sync',
-        'WebDAV 同步失败 ($reason)\n路径: $syncFilePath',
+        'WebDAV 同步失败 ($reason)\n路径: $syncFilePath\n'
+        '连续失败: $_consecutiveFailures 次,退避 ${(delayMs / 60000).round()} 分钟',
         error: e,
         stack: stack,
       );
@@ -529,6 +604,8 @@ class WebDavSyncService extends ChangeNotifier {
       await _client.putString(syncFilePath, envelope);
       _lastSyncAt = DateTime.now().millisecondsSinceEpoch;
       _lastResult = '已上传本地数据';
+      _consecutiveFailures = 0;
+      _retryNotBefore = 0;
       _refreshStamps();
       await _persistState();
       LogService.instance.info(
@@ -573,6 +650,8 @@ class WebDavSyncService extends ChangeNotifier {
       await _applyRemote(remote);
       _lastSyncAt = DateTime.now().millisecondsSinceEpoch;
       _lastResult = '已应用云端数据';
+      _consecutiveFailures = 0;
+      _retryNotBefore = 0;
       _refreshStamps();
       await _persistState();
       LogService.instance.info('Sync', 'WebDAV 云端数据已合并到本地');
@@ -657,44 +736,33 @@ class WebDavSyncService extends ChangeNotifier {
 
   Future<Map<String, dynamic>> _buildPayload() async {
     final shelf = await ShelfService.instance.list();
-    final progress = await ProgressService.instance.listForSync();
+    // 进度只上行最近 N 条并做字段瘦身(见 SyncPayload):
+    // 同步载荷的体积主要来自这个列表,而它每轮都要整包上传。
+    final progress = await ProgressService.instance.listForSync(
+      limit: SyncPayload.maxProgressRows,
+    );
     return {
-      'v': 2,
+      'v': SyncPayload.version,
+      // 易变字段:参与比较时会被 SyncPayload.compareKey 剔除,保留只为兼容旧版本客户端。
       'updatedAt': DateTime.now().millisecondsSinceEpoch,
       'deviceTag': _deviceTag,
       'settingsChangedAt': SettingsService.instance.settingsChangedAt,
       'sourcesChangedAt': SourceManager.instance.lastChangedAt,
       'settings': SettingsService.instance.exportForSync(),
       'sources': SourceManager.instance.exportForSync(),
-      'shelf': shelf
-          .map(
-            (book) => {
-              'sourceId': book.sourceId,
-              'bookId': book.bookId,
-              'title': book.title,
-              'cover': book.cover,
-              'author': book.author,
-              'sourceName': book.sourceName,
-              'addTime': book.addTime,
-            },
-          )
-          .toList(),
-      'progress': progress
-          .map(
-            (row) => {
-              'sourceId': '${row['sourceId'] ?? ''}',
-              'bookId': '${row['bookId'] ?? ''}',
-              'bookTitle': '${row['bookTitle'] ?? ''}',
-              'cover': '${row['cover'] ?? ''}',
-              'chapterId': '${row['chapterId'] ?? ''}',
-              'chapterName': '${row['chapterName'] ?? ''}',
-              'chapterIdx': (row['chapterIdx'] as num?)?.toInt() ?? 0,
-              'currentTime': (row['currentTime'] as num?)?.toDouble() ?? 0.0,
-              'duration': (row['duration'] as num?)?.toDouble() ?? 0.0,
-              'updatedAt': (row['updatedAt'] as num?)?.toInt() ?? 0,
-            },
-          )
-          .toList(),
+      'shelf': [
+        for (var i = 0; i < shelf.length; i++)
+          SyncPayload.shelfRow(
+            sourceId: shelf[i].sourceId,
+            bookId: shelf[i].bookId,
+            title: shelf[i].title,
+            author: shelf[i].author,
+            sourceName: shelf[i].sourceName,
+            addTime: shelf[i].addTime,
+            cover: i < SyncPayload.coverKeepCount ? shelf[i].cover : '',
+          ),
+      ],
+      'progress': SyncPayload.progressRows(progress),
     };
   }
 
@@ -718,18 +786,6 @@ class WebDavSyncService extends ChangeNotifier {
 
   Future<Map<String, dynamic>> _decryptEnvelope(String envelope) =>
       compute(_decryptEnvelopeJob, (envelope, _password));
-
-  /// 规范化 JSON(键排序),用于比较合并结果与云端数据是否一致。
-  String _sortedJson(dynamic value) {
-    if (value is Map) {
-      final keys = value.keys.map((k) => '$k').toList()..sort();
-      return '{${keys.map((k) => '${jsonEncode(k)}:${_sortedJson(value[k])}').join(',')}}';
-    }
-    if (value is List) {
-      return '[${value.map(_sortedJson).join(',')}]';
-    }
-    return jsonEncode(value);
-  }
 
   int _asInt(dynamic value) {
     if (value is num) return value.toInt();

@@ -3,17 +3,19 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:audio_service/audio_service.dart';
 
+import 'data/alist_service.dart';
+import 'data/aliyun_pan_service.dart';
 import 'data/baidu_pan_service.dart';
 import 'data/cloud_auth_service.dart';
 import 'data/db.dart';
 import 'data/listening_stats_service.dart';
 import 'data/log_service.dart';
+import 'data/pan115_service.dart';
 import 'data/quark_pan_service.dart';
 import 'data/settings_service.dart';
 import 'data/theme_service.dart';
 import 'data/update_check_service.dart';
 import 'data/webdav_service.dart';
-import 'data/alist_service.dart';
 import 'data/webdav_sync_service.dart';
 import 'player/audio_handler.dart';
 import 'player/player_service.dart';
@@ -125,6 +127,18 @@ Future<void> _initDeferredServices() async {
     LogService.instance.info('Alist', '配置加载完成');
   } catch (e, stack) {
     LogService.instance.error('Alist', '配置加载失败', error: e, stack: stack);
+  }
+  try {
+    await Pan115Service.instance.init();
+    LogService.instance.info('Pan115', '配置加载完成');
+  } catch (e, stack) {
+    LogService.instance.error('Pan115', '配置加载失败', error: e, stack: stack);
+  }
+  try {
+    await AliyunPanService.instance.init();
+    LogService.instance.info('AliyunPan', '配置加载完成');
+  } catch (e, stack) {
+    LogService.instance.error('AliyunPan', '配置加载失败', error: e, stack: stack);
   }
   try {
     await WebDavSyncService.instance.init();

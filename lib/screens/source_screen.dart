@@ -6,11 +6,13 @@ import '../data/settings_service.dart';
 import '../data/webdav_sync_service.dart';
 import '../source/source_manager.dart';
 import 'alist_screen.dart';
+import 'aliyun_pan_screen.dart';
 import 'background_protection_screen.dart';
 import 'baidu_pan_screen.dart';
 import 'cache_manage_screen.dart';
 import 'cloud_auth_screen.dart';
 import 'discover_source_setting_screen.dart';
+import 'pan115_screen.dart';
 import 'quark_pan_screen.dart';
 import 'runtime_log_screen.dart';
 import 'software_update_screen.dart';
@@ -349,6 +351,32 @@ class _SourceScreenState extends State<SourceScreen> {
                           context,
                           MaterialPageRoute(
                             builder: (_) => const QuarkPanScreen(),
+                          ),
+                        ),
+                      ),
+                      const Divider(height: 1, indent: 56),
+                      ListTile(
+                        leading: const Icon(Icons.cloud_done_outlined),
+                        title: const Text('115 网盘书库（测试）'),
+                        subtitle: const Text('登录后浏览 115 网盘目录'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const Pan115Screen(),
+                          ),
+                        ),
+                      ),
+                      const Divider(height: 1, indent: 56),
+                      ListTile(
+                        leading: const Icon(Icons.cloud_sync_outlined),
+                        title: const Text('阿里云盘书库（测试）'),
+                        subtitle: const Text('登录后浏览阿里云盘目录'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const AliyunPanScreen(),
                           ),
                         ),
                       ),

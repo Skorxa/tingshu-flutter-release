@@ -4,11 +4,13 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../data/alist_service.dart';
+import '../data/aliyun_pan_service.dart';
 import '../data/baidu_pan_service.dart';
 import '../data/cache_service.dart';
 import '../data/catalog_cache_service.dart';
 import '../data/catalog_filter.dart';
 import '../data/log_service.dart';
+import '../data/pan115_service.dart';
 import '../data/quark_pan_service.dart';
 import '../data/webdav_service.dart';
 import '../player/player_service.dart';
@@ -374,6 +376,14 @@ class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
         await _refreshAlistCatalog(bookId);
         return;
       }
+      if (sourceId == Pan115Service.sourceId) {
+        await _refreshPan115Catalog(bookId);
+        return;
+      }
+      if (sourceId == AliyunPanService.sourceId) {
+        await _refreshAliyunCatalog(bookId);
+        return;
+      }
       setState(() {
         _page = 1;
         _maxPage = 1;
@@ -418,6 +428,64 @@ class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('夸克目录已刷新，共 ${cached.chapters.length} 集')),
+    );
+  }
+
+  Future<void> _refreshPan115Catalog(String bookId) async {
+    final cached = await Pan115Service.instance.refreshCatalog(
+      bookCid: bookId,
+      folderName: _bookTitle.isNotEmpty
+          ? _bookTitle
+          : (_info?.title.isNotEmpty == true ? _info!.title : bookId),
+      fallbackCover: _cover.isNotEmpty ? _cover : (_info?.cover ?? ''),
+      fallbackAuthor: _info?.author ?? '',
+    );
+    if (!mounted) return;
+    setState(() {
+      _info = cached.info;
+      _chapters
+        ..clear()
+        ..addAll(cached.chapters);
+      _page = 1;
+      _maxPage = 1;
+      _hasMore = false;
+      _error = null;
+    });
+    _syncPlayerContext();
+    _focusCurrentChapter(force: true);
+    unawaited(_refreshCachedIds());
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('115 目录已刷新，共 ${cached.chapters.length} 集')),
+    );
+  }
+
+  Future<void> _refreshAliyunCatalog(String bookId) async {
+    final cached = await AliyunPanService.instance.refreshCatalog(
+      bookFileId: bookId,
+      folderName: _bookTitle.isNotEmpty
+          ? _bookTitle
+          : (_info?.title.isNotEmpty == true ? _info!.title : bookId),
+      fallbackCover: _cover.isNotEmpty ? _cover : (_info?.cover ?? ''),
+      fallbackAuthor: _info?.author ?? '',
+    );
+    if (!mounted) return;
+    setState(() {
+      _info = cached.info;
+      _chapters
+        ..clear()
+        ..addAll(cached.chapters);
+      _page = 1;
+      _maxPage = 1;
+      _hasMore = false;
+      _error = null;
+    });
+    _syncPlayerContext();
+    _focusCurrentChapter(force: true);
+    unawaited(_refreshCachedIds());
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('阿里云盘目录已刷新，共 ${cached.chapters.length} 集')),
     );
   }
 
@@ -515,7 +583,12 @@ class _PlayerCatalogScreenState extends State<PlayerCatalogScreen> {
   }
 
   bool _isStaticCatalogSource(String sourceId) {
-    return sourceId == 'webdav' || sourceId == 'baidu' || sourceId == 'quark';
+    return sourceId == 'webdav' ||
+        sourceId == 'baidu' ||
+        sourceId == 'quark' ||
+        sourceId == 'alist' ||
+        sourceId == Pan115Service.sourceId ||
+        sourceId == AliyunPanService.sourceId;
   }
 
   Future<void> _showJumpInput() async {

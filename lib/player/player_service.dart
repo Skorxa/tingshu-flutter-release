@@ -5,12 +5,14 @@ import 'package:just_audio/just_audio.dart';
 import 'package:audio_service/audio_service.dart';
 
 import '../data/alist_service.dart';
+import '../data/aliyun_pan_service.dart';
 import '../data/baidu_pan_service.dart';
 import '../data/cache_service.dart';
 import '../data/catalog_cache_service.dart';
 import '../data/cloud_auth_service.dart';
 import '../data/listening_stats_service.dart';
 import '../data/log_service.dart';
+import '../data/pan115_service.dart';
 import '../data/quark_pan_service.dart';
 import '../data/progress_service.dart';
 import '../data/settings_service.dart';
@@ -672,7 +674,9 @@ class PlayerService extends ChangeNotifier {
     final dynamicCloudUrl =
         chapterId.startsWith('baidu:') ||
         chapterId.startsWith('quark:') ||
-        chapterId.startsWith('alist:');
+        chapterId.startsWith('alist:') ||
+        chapterId.startsWith(Pan115Service.chapterPrefix) ||
+        chapterId.startsWith(AliyunPanService.chapterPrefix);
     if (directUrl.isNotEmpty && !dynamicCloudUrl) {
       final headers = <String, String>{};
       final rawHeaders = currentChapter['audioHeaders'];
@@ -734,6 +738,43 @@ class PlayerService extends ChangeNotifier {
       LogService.instance.info(
         'Player',
         '使用 Alist 直链播放',
+        detail: '章节: $chapterName\n重试: $attempt',
+      );
+      return AudioSource.uri(
+        Uri.parse(audio.url),
+        headers: audio.headers.isEmpty ? null : audio.headers,
+        tag: tag,
+      );
+    }
+
+    if (chapterId.startsWith(Pan115Service.chapterPrefix)) {
+      // 115 懒解析:章节只带 pick_code,播放到哪集才取哪集的直链。
+      final audio = await Pan115Service.instance.resolveAudio(
+        chapterId.substring(Pan115Service.chapterPrefix.length),
+        // CDN 反盗链时换请求头变体重试(0=完整头 1=去 Cookie 2=仅 UA)
+        headerVariant: attempt > 1 ? attempt - 1 : 0,
+      );
+      LogService.instance.info(
+        'Player',
+        '使用 115 网盘直链播放',
+        detail: '章节: $chapterName\n重试: $attempt',
+      );
+      return AudioSource.uri(
+        Uri.parse(audio.url),
+        headers: audio.headers.isEmpty ? null : audio.headers,
+        tag: tag,
+      );
+    }
+
+    if (chapterId.startsWith(AliyunPanService.chapterPrefix)) {
+      // 阿里云盘懒解析:章节只带 file_id,播放时才换新鲜直链(带签名与有效期)。
+      final audio = await AliyunPanService.instance.resolveAudio(
+        chapterId.substring(AliyunPanService.chapterPrefix.length),
+        headerVariant: attempt > 1 ? attempt - 1 : 0,
+      );
+      LogService.instance.info(
+        'Player',
+        '使用阿里云盘直链播放',
         detail: '章节: $chapterName\n重试: $attempt',
       );
       return AudioSource.uri(

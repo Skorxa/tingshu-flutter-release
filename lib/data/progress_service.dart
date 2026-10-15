@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'db.dart';
+import 'sync_payload.dart';
 
 class ProgressService {
   ProgressService._();
@@ -100,7 +101,12 @@ class ProgressService {
     await db.delete('play_progress');
   }
 
-  /// 导出播放进度用于 WebDAV 同步(限制条数以控制负载)。
+  /// 导出播放进度用于 WebDAV 同步。
+  ///
+  /// 默认只取最近 [limit] 条(`updatedAt DESC`,当前/最近播放的书一定在内):
+  /// 同步载荷的体积主要来自这个列表,800 条 × 带封面签名 URL 会到数百 KB 量级,
+  /// 对按流量/请求数计费的限额 WebDAV 不划算。上行前还会经 [SyncPayload.progressRow]
+  /// 再做一次字段瘦身。
   Future<List<Map<String, dynamic>>> listForSync({int limit = 800}) async {
     final db = await getDb();
     final rows = await db.query(
@@ -132,17 +138,13 @@ class ProgressService {
           ((existing['updatedAt'] as int?) ?? 0) >= updatedAt) {
         continue;
       }
+      // 同步载荷不带封面(见 SyncPayload.progressRow),这里由 SyncPayload 保留本地
+      // 已有封面,避免一次同步把本机历史列表的封面清空。
       batch.insert('play_progress', {
-        'sourceId': sourceId,
-        'bookId': bookId,
-        'bookTitle': '${row['bookTitle'] ?? ''}',
-        'cover': '${row['cover'] ?? ''}',
-        'chapterId': '${row['chapterId'] ?? ''}',
-        'chapterName': '${row['chapterName'] ?? ''}',
-        'chapterIdx': (row['chapterIdx'] as num?)?.toInt() ?? 0,
-        'currentTime': (row['currentTime'] as num?)?.toDouble() ?? 0.0,
-        'duration': (row['duration'] as num?)?.toDouble() ?? 0.0,
-        'updatedAt': updatedAt,
+        ...SyncPayload.progressRowForInsert(
+          incoming: row,
+          local: existing,
+        ),
       }, conflictAlgorithm: ConflictAlgorithm.replace);
       changed++;
     }

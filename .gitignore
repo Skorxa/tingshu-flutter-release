@@ -72,3 +72,24 @@ anr_*.txt
 /lx-lxwalnut-music-mobile/
 /lx源/
 /聆阅_1.1.3_听书API.md
+/115-cloud/
+/115开放平台/
+/115-player-flutter-dev-doc.md
+/Sources-v4/
+/Sources-v4.zip
+/xml_lrt(1)/
+/优化光遇 听书/
+/番茄听书.json
+/聆阅API_源B_酷我有声/
+/聆阅API_源B_酷我有声.zip
+/ssts--Android/
+.test_out.txt
+.flutter_tool_state
+JWT*
+test/_*.json
+test/_*.js
+test/probe_*.js
+test/t_*.js
+test/strip_builtin_account.js
+.workbuddy-ai/
+.zcode/
