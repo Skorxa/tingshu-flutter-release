@@ -1,12 +1,12 @@
 {
-  "versionName": "1.6.6",
-  "versionCode": 27,
+  "versionName": "1.6.7",
+  "versionCode": 28,
   "force": false,
-  "changelog": "### 修复\n- **内置 AList 只读目录第一页**：AList 列目录接口是分页的（默认每页 200 条），而之前只请求一次，单目录超过 200 集的站点会**丢掉后面的全部章节**。现在会依据 `has_more` / `pages_total` / `total` 自动翻页（上限 50 页、2 万条），并做了同名去重和「服务端忽略 page 参数」的死循环保护。\n  - 实测 `asmrmoon.com` 的一个 353 集目录：修复前拿到 200 条，修复后 353 条（其中 339 个音频）。\n\n### 适配\n- 验证 `asmrmoon.com`（AList v3）全链路可用：`/api/fs/list` 公开可列、`/api/fs/get` 返回带 sign 的 `raw_url`（独立 CDN 域名）、音频 206 `audio/mpeg`。\n- 提示：该站点对**大陆机房 IP 返回 Cloudflare 403**（主站与音频 CDN 都是），手机上能否直连需要实测；若不通，只能走代理。",
-  "sha256": "3c0304843c8a42d659932e6644507af1b3589f5f38a8d35b7401cc0c3d0c08ce",
-  "size": 29696552,
-  "publishedAt": "2026-11-11T14:18:43Z",
+  "changelog": "### 界面\n- **我的书架重做**：从「每行一张横卡片 + 56×56 小方块封面」换成**自适应网格**——封面 3:4 大图、圆角 14，手机 2 列、大屏最多 6 列（`430/600/780/960` 四档）。\n- 封面角上标「追更」，卡片正文只留标题（最多两行）和一行副标题：`音源 · 上次 3 小时前`。时间文案支持 刚刚 / N 分钟前 / N 小时前 / 昨天 / N 天前 / 具体日期。\n- 副标题的「上次收听」直接复用已有的播放记录（一次查询建成映射），不额外查库。\n- 顶部新增一行统计：`共 N 本 · 追更 M 本`（历史页显示「最近播放 N 条」）。\n- 「移出书架 / 删除播放记录」收进**长按菜单**，列表不再每行挂一个删除按钮；打开时的 loading 改成封面上的半透明遮罩 + 转圈。",
+  "sha256": "04abc53d2a35538b3898850a3e59ba3b9cbfb93d2510fc6657403c563a4fe80a",
+  "size": 29696720,
+  "publishedAt": "2026-11-11T14:51:22Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.6.6/tingshu-1.6.6-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.6.7/tingshu-1.6.7-arm64.apk"
   ]
 }
