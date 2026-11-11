@@ -1,12 +1,12 @@
 {
-  "versionName": "1.6.3",
-  "versionCode": 24,
+  "versionName": "1.6.4",
+  "versionCode": 25,
   "force": false,
-  "changelog": "### 修复\n- **音源登录页看不到「完成」按钮**：Android 15 起系统强制边到边渲染，登录页没有处理系统栏内边距，顶部工具栏被状态栏盖住，用户找不到确认入口。现在按系统栏高度让出空间，并给登录页固定浅色主题（深色系统下状态栏图标也看得清）。\n- **登录后拿不到 Cookie**：原先只从「当前页 + 初始页」两个地址读 Cookie，登录一旦跳到统一登录域名（passport 之类）就会漏。现在记录访问过的所有域名并逐个读取，顶部还会显示「已捕获 N 个 Cookie」。\n- **手势返回导致登录白做**：Android 13+ 的返回手势可能直接关闭页面、不经过 `onBackPressed`，结果永远传不回 App，Cookie 也没保存。现在注册了返回回调，所有返回路径都会把 Cookie 带回主界面。\n- 登录页没有拿到 Cookie 时的提示改为「请在登录页完成登录后，点右上角「完成」保存」，不再只报「没有返回 Cookie」。",
-  "sha256": "16602159b289f57569fd7bb06e880e0de2f859230a76c4602de0e63676008564",
-  "size": 29630516,
-  "publishedAt": "2026-11-11T10:25:23Z",
+  "changelog": "### 修复\n- **音源自己的版本号一直读不到**：音源脚本里的 `version` 字段此前被当成 `apiVersion` 的回退值使用 —— 只声明 `version`、没写 `apiVersion` 的源会被直接判为「不支持的音源协议版本」，而正常源的这个版本号又从未被记录，界面上永远显示 `v1`（那其实是协议版本，不是源版本）。现在两者彻底分开：`version` 会被正确读取、随订阅更新、并在音源管理列表里显示成 `v3` 这样的源版本。\n\n### 新增\n- **音源可以自带限流与缓存要求**：源可在脚本里声明 `limits.maxConcurrent`（聚合搜索时最多并发几个请求）、`limits.minGapMs`（两次请求的最小间隔）、`cache.catalogSeconds`（目录缓存有效期，`0` 表示要求不缓存）。\n  - 原则是**源声明了就按源的来，没声明就完全回到 App 设置**，不会因为缺省而变慢或变激进。\n  - `minGapMs` 只用于放慢，声明得比 App 默认更小不会加速；越界值自动夹取，非法值按未声明处理。\n  - 音源管理列表会显示 `v3 · 并发 1 · 间隔 900ms · 不缓存` 这样的摘要，方便确认源的要求真的生效了。\n  - 首批落地的源：悦听吧（并发 1 / 900ms / 目录缓存 30 分钟）、13听书网（并发 1 / 400ms）。",
+  "sha256": "bef4c0815f1ddc6ad359fe16d242b9bcf0c02e34cde2ef517481a81ede2f2e09",
+  "size": 29631016,
+  "publishedAt": "2026-11-11T12:43:49Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.6.3/tingshu-1.6.3-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.6.4/tingshu-1.6.4-arm64.apk"
   ]
 }
