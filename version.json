@@ -1,12 +1,12 @@
 {
-  "versionName": "1.6.5",
-  "versionCode": 26,
+  "versionName": "1.6.6",
+  "versionCode": 27,
   "force": false,
-  "changelog": "### 修复\n- **关掉「聚合搜索」后仍然搜索全部音源**。三处叠加导致：\n  1. 上一次搜索还没跑完时再次搜索会被**静默丢弃**，界面继续显示上一次（聚合）的结果 —— 现在会排队，等当前批次结束后自动补跑；\n  2. 搜索批次里一旦抛异常，`_loading` 会永远卡在 true，之后所有搜索都静默失效 —— 现在用 try/finally 保证复位，异常只记日志；\n  3. 界面沿用了上次的「聚合态」和 `当前音源=全部`，即使设置已经关掉 —— 现在每次都用最新设置计算，`_loadMore` 还会按设置硬过滤目标源，残留的其它源分桶不会再被查询或显示。\n- 设置页改动「聚合搜索」后，返回搜索页立刻生效（以前要等下一次状态刷新）。",
-  "sha256": "469b46ae0f0586cff431bee0e9d1b83e473ec4c1a9e86c41d3946d5864ec3931",
+  "changelog": "### 修复\n- **内置 AList 只读目录第一页**：AList 列目录接口是分页的（默认每页 200 条），而之前只请求一次，单目录超过 200 集的站点会**丢掉后面的全部章节**。现在会依据 `has_more` / `pages_total` / `total` 自动翻页（上限 50 页、2 万条），并做了同名去重和「服务端忽略 page 参数」的死循环保护。\n  - 实测 `asmrmoon.com` 的一个 353 集目录：修复前拿到 200 条，修复后 353 条（其中 339 个音频）。\n\n### 适配\n- 验证 `asmrmoon.com`（AList v3）全链路可用：`/api/fs/list` 公开可列、`/api/fs/get` 返回带 sign 的 `raw_url`（独立 CDN 域名）、音频 206 `audio/mpeg`。\n- 提示：该站点对**大陆机房 IP 返回 Cloudflare 403**（主站与音频 CDN 都是），手机上能否直连需要实测；若不通，只能走代理。",
+  "sha256": "3c0304843c8a42d659932e6644507af1b3589f5f38a8d35b7401cc0c3d0c08ce",
   "size": 29696552,
-  "publishedAt": "2026-11-11T13:41:25Z",
+  "publishedAt": "2026-11-11T14:18:43Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.6.5/tingshu-1.6.5-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.6.6/tingshu-1.6.6-arm64.apk"
   ]
 }
