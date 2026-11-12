@@ -1,12 +1,12 @@
 {
-  "versionName": "1.6.11",
-  "versionCode": 32,
+  "versionName": "1.6.12",
+  "versionCode": 33,
   "force": false,
-  "changelog": "### 改进\n- **聚合搜索**\n  - **结果缓存 5 分钟**：同一关键词再搜、切走再回来会**先秒出上次结果**，同时在后台静默刷新，有差异再替换。\n  - **改词即取消**：搜索中换关键词，旧请求的回包会被直接丢弃，不会再出现上一个词的结果混进来。\n  - **进度可见**：左侧音源栏里还没出结果的源显示转圈；结果区顶部显示「搜索中 · 已完成 12/23 · 5 个源有结果」+ 细进度条，全部完成后收成一行统计。\n  - **并发自适应**：按音源数量在 3–6 路之间调整（23 个源走 5 路），仍受每个源声明的 `limits.maxConcurrent` 约束。\n\n- **书音FM（源 v2）**\n  - **取流不再降级到嗅探**：以前探测失败会去开 WebView 抓 4 秒；现在只有连签名地址都取不到才嗅探，探测失败优先回到官方 302 跳转地址（播放器会跟随）。\n  - **并行探测**前两个候选，且 mp3/m4a 直链优先；探测超时 12 秒 → 5 秒。\n  - 声明 `limits`（并发 2 / 间隔 200ms / 超时 20s）与目录缓存 6 小时。\n  - 发现页分类 3 个 → **6 个**；搜索页数封顶 20 页（搜「三体」原本有 59 页）。",
-  "sha256": "7bf5e7d4f232a7558034c5ba7aeef21f48ea1258e9683f8901a5882ffde5cea0",
+  "changelog": "### 修复\n- **内置 B 站源搜索不出结果**。根因不在接口，而在于我们**自己伪造了 buvid3 Cookie**：实测同一个搜索接口，不带任何 Cookie 能返回 20 条，带上自造的 buvid3 就变成 `code=0 + result=[] + v_voucher`（风控静默空结果）。以前「风控补救」还会继续塞自造 buvid3/b_nut，等于把风控状态锁死。\n  - 不再自造 buvid3/buvid4/b_nut；服务端没下发就保持匿名请求（实测正常）。\n  - 自造项一律不参与请求头（只保留 SESSDATA / bili_jct 等登录态）。\n  - 命中 `v_voucher` 时改为**清空 Cookie + 重新预热**，而不是继续伪造。\n  - 搜索遇到 `v_voucher` 会先做一次风控补救再重试，日志可见「搜索命中风控（v_voucher），清 Cookie 后重试」。",
+  "sha256": "6b39ecd9a300dd37e2c198c1649af1b99eace0049a46b5db0706b03eed667903",
   "size": 29762292,
-  "publishedAt": "2026-11-12T01:46:09Z",
+  "publishedAt": "2026-11-12T02:11:34Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.6.11/tingshu-1.6.11-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.6.12/tingshu-1.6.12-arm64.apk"
   ]
 }
