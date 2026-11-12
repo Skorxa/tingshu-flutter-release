@@ -1,12 +1,12 @@
 {
-  "versionName": "1.6.14",
-  "versionCode": 35,
+  "versionName": "1.8.0",
+  "versionCode": 10800,
   "force": false,
-  "changelog": "### 修复\n- **喜马拉雅发现页「小说」的男生/女生按钮一闪而过、点不到**。原因是：\n  1. 频道带二级 tab 时会**无条件自动切到第一个 tab**，切完的请求不再返回 `pageTab` 模块 → 按钮被清空；\n  2. 第二次响应没有 tab 时，代码直接把 tab 列表覆盖成空。\n  现在改成：先把 tab 栏显示出来，**默认页有内容就停在默认页让你自己点**；只有默认页是空白时才自动进第一个 tab；并且带 tabId 的响应不再清空已有 tab 栏（切 tab 后选中态也能保持）。\n\n### 音源\n- 懒人听书 v3：补上发现页（小编推荐 / 女生爱听 / 男生必听，各 8 本）。\n- 下线「听友FM（Worker）」源（上游 `audiocdn.966001.xyz` 早已 NXDOMAIN），订阅 20 → 19 个源。",
-  "sha256": "5a65098bd7686739f412aa79bfed633751c8a291dfccc6f3b22a8f9ad387d260",
-  "size": 29762292,
-  "publishedAt": "2026-11-12T14:39:01Z",
+  "changelog": "### 新增\n- **底部导航三种样式**（设置 → 外观 → 底部导航样式）：\n  - **普通**：实色悬浮胶囊 + 轻投影；\n  - **磨砂毛玻璃**：`BackdropFilter` 实时模糊导航条后面的内容 + 半透明填充 + 细描边；\n  - **液态玻璃**：接入 `liquid_glass_widgets`（iOS 26 风格 shader 玻璃，带高光与折射）。\n  - 导航条从「贴底」改为**悬浮胶囊**，内容可以滚到它后面；MiniPlayer 自动抬到导航条上方。\n  - 液态玻璃只在选中该模式时才预热 shader；预热失败或超时（3 秒）自动回落磨砂，不会白屏。\n- **版本号规范**：从 1.8.0 起按「语义化版本 + versionCode = major×10000+minor×100+patch」执行，详见 `docs/版本号规范.md`。\n\n### 修复\n- **断点续听总是恢复不到位置**。两个原因叠加：\n  1. 续播定位是「`play()` 之后固定等 1.5 秒再 seek」，网络音频常常 1.5 秒还没就绪，seek 直接被播放器忽略；\n  2. 更糟的是这段时间里 `_autoSave` 已经把 `currentTime=0` 写进了进度库，下次启动读到的断点就是 0。\n  现在改成：`setAudioSource`（已 await 就绪）之后、`play()` 之前 seek；seek 落地前**禁止写进度**（6 秒守卫，位置确认到位才解除）；播放后再校验一次，位置被机型重置则补 seek；暂停时立即落库（不等 5 秒节流）。",
+  "sha256": "ff37762ff8e0f8374c2958bacea0cae6b71738e829b807c9f9e1e514745e1e0c",
+  "size": 30362345,
+  "publishedAt": "2026-11-12T14:58:16Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.6.14/tingshu-1.6.14-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.8.0/tingshu-1.8.0-arm64.apk"
   ]
 }
