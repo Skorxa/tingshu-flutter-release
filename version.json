@@ -1,12 +1,12 @@
 {
-  "versionName": "1.8.5",
-  "versionCode": 10805,
+  "versionName": "1.8.6",
+  "versionCode": 10806,
   "force": false,
-  "changelog": "### 修复\n- **迷你播放器的圆钮点封面进不去播放页**：原来点哪儿都是播放/暂停，进播放页要长按，等于把这个最常用的操作藏了起来。现在：\n  - **点封面（圆钮任意位置）→ 直接打开播放页**；\n  - 播放/暂停改成圆钮中央的小按钮（26dp 圆点 + 描边，34dp 点击区），点它才暂停；\n  - 「分段 + 播放条」布局本来就是点标题进播放页、点右侧按钮暂停，保持不变。",
-  "sha256": "ec8749d2d1ac8b1d033b7baa21e5dba1efab61868468afc519d5b7d23acaa34d",
-  "size": 30150109,
-  "publishedAt": "2026-11-13T00:03:08Z",
+  "changelog": "### 修复\n- **书架切换书籍要转圈很久**。两处原因：\n  1. 续播补全目录是**从第 1 页开始逐页往后翻**，每页之间还固定 `delay(250ms)`。一本书 40 页、断点在第 13 页，就要连发 12 个请求 + 3 秒等待才开播。现在按「断点序号 ÷ 每页条数」**直接跳到目标页**（±1 兜底），通常 1 个请求就定位到；找不到才顺序补齐，且最多再补 6 页。\n  2. 书架点开一本书时，要**等整条播放链路（解析音源 + setAudioSource 缓冲）跑完才跳页**，所以书架卡片一直转圈。现在先推播放页，解析与缓冲在播放页里进行，书架立即响应。",
+  "sha256": "67c6a8da0db9fbd29dd8fff4a2b196b283b5d50cccc83cd64438964134a213bf",
+  "size": 30151493,
+  "publishedAt": "2026-11-13T14:00:34Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.8.5/tingshu-1.8.5-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.8.6/tingshu-1.8.6-arm64.apk"
   ]
 }
