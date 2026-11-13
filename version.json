@@ -1,12 +1,12 @@
 {
-  "versionName": "1.8.6",
-  "versionCode": 10806,
+  "versionName": "1.8.7",
+  "versionCode": 10807,
   "force": false,
-  "changelog": "### 修复\n- **书架切换书籍要转圈很久**。两处原因：\n  1. 续播补全目录是**从第 1 页开始逐页往后翻**，每页之间还固定 `delay(250ms)`。一本书 40 页、断点在第 13 页，就要连发 12 个请求 + 3 秒等待才开播。现在按「断点序号 ÷ 每页条数」**直接跳到目标页**（±1 兜底），通常 1 个请求就定位到；找不到才顺序补齐，且最多再补 6 页。\n  2. 书架点开一本书时，要**等整条播放链路（解析音源 + setAudioSource 缓冲）跑完才跳页**，所以书架卡片一直转圈。现在先推播放页，解析与缓冲在播放页里进行，书架立即响应。",
-  "sha256": "67c6a8da0db9fbd29dd8fff4a2b196b283b5d50cccc83cd64438964134a213bf",
-  "size": 30151493,
-  "publishedAt": "2026-11-13T14:00:34Z",
+  "changelog": "### 优化\n- **数据库层三处欠账**（这几项不是卡顿主因，但会随使用时间放大）：\n  1. **开 WAL + `synchronous=NORMAL`**：播放进度每 5 秒写一次、目录每页写一批、缓存登记也在写，原来 `journal_mode=delete` 每次都要 fsync。现在写不阻塞读、也不每次刷盘。\n  2. **目录页写入改成 UPSERT**：`catalog_books` 的「保留更大的 page」用 `ON CONFLICT ... page = MAX(catalog_books.page, excluded.page)` 写进 SQL，省掉每页写之前的那次 SELECT（minSdk 29 的 SQLite ≥ 3.28 支持）。\n  3. **目录缓存清理**：`catalog_books` / `catalog_chapters` 以前**只增不减**，翻过的书越多库越大。现在启动时做一次有界清理：保留书架里的书、有播放进度的书、最近 30 天更新过的书，总数最多 300 本，其余连同章节一起删除。",
+  "sha256": "1c016517e9cb38633af6a5153a91a29ed5473fb595784db41544cd2a2216519d",
+  "size": 30151497,
+  "publishedAt": "2026-11-13T14:11:15Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.8.6/tingshu-1.8.6-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.8.7/tingshu-1.8.7-arm64.apk"
   ]
 }
