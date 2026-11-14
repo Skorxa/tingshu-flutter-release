@@ -1,12 +1,12 @@
 {
-  "versionName": "1.11.1",
-  "versionCode": 11101,
+  "versionName": "1.11.2",
+  "versionCode": 11102,
   "force": false,
-  "changelog": "### 修复\n- **唔语·喜马 不再走飞鸟网关**：之前为了对付费集兜底，在 `baseInfo` 后面接了一跳飞鸟网关，结果凭据失效时每集都要多打一次（还会被限流「操作太频繁」），播放器重试 + 缓存任务叠加起来十几秒打出十几条请求。现在整段删掉。\n- **付费集改走唔语的 `/bp/url2`**：这才是唔语自己的取流通道——用你**登录的唔语账号**签 `s`/`t`（`s = md5(item+params+t)`，IV 取 `md5(item)` 前 16 位 hex 的 ASCII）。实测签名被服务端接受（把 token 换成就返回 `401 PLAY_TOKEN_INVALID`，说明只差登录态）。\n- **登录后自动把 token 注入「唔语·」音源**：token 只放内存（`__store`），不写进 SharedPreferences；退出登录立刻清掉。\n- **失败的集 5 分钟内熔断**：同一集不再重复打接口，播放器重试和缓存任务会立刻拿到明确错误。\n\n### 说明\n- 唔语·喜马的取流顺序：`/bp/url2`（付费集，需登录）→ 喜马 `baseInfo`（免费集）→ 报错并提示填会员 Cookie。",
-  "sha256": "d5820829d4af6fa28ffe6879d9c845a34cfbc680e53eaf643a61b15aea2fc28a",
-  "size": 30282061,
-  "publishedAt": "2026-11-14T16:05:42Z",
+  "changelog": "### 修复\n- **缓存文件名过长导致下载失败**：`File name too long (errno 36)`。缓存文件名是 `源ID::章节ID` 的 base64，而唔语·喜马为了给 `/bp/url2` 签名把整条章节名塞进了 chapterId，长标题 base64 后超过 255 字节上限，缓存直接建不了文件。现在：\n  - 缓存层兜底：超过 100 字符就截断并接一段 sha256（确定性、不撞名，老缓存不受影响）；\n  - 唔语·喜马的 chapterId 恢复成 `专辑:页:集` 的短格式，标题只放内存给签名用。\n- 顺手确认：`/bp/url2` 签名不依赖标题内容（空标题也能过签，只是 token 校验），所以重启后内存里没标题也不影响播放。",
+  "sha256": "21f271254bcaaef77de81dd14cb946e4f3d11c572a9decc2e81723f9e411e724",
+  "size": 30282065,
+  "publishedAt": "2026-11-14T16:28:54Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.11.1/tingshu-1.11.1-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.11.2/tingshu-1.11.2-arm64.apk"
   ]
 }
