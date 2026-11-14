@@ -1,12 +1,12 @@
 {
-  "versionName": "1.11.2",
-  "versionCode": 11102,
+  "versionName": "1.12.0",
+  "versionCode": 11200,
   "force": false,
-  "changelog": "### 修复\n- **缓存文件名过长导致下载失败**：`File name too long (errno 36)`。缓存文件名是 `源ID::章节ID` 的 base64，而唔语·喜马为了给 `/bp/url2` 签名把整条章节名塞进了 chapterId，长标题 base64 后超过 255 字节上限，缓存直接建不了文件。现在：\n  - 缓存层兜底：超过 100 字符就截断并接一段 sha256（确定性、不撞名，老缓存不受影响）；\n  - 唔语·喜马的 chapterId 恢复成 `专辑:页:集` 的短格式，标题只放内存给签名用。\n- 顺手确认：`/bp/url2` 签名不依赖标题内容（空标题也能过签，只是 token 校验），所以重启后内存里没标题也不影响播放。",
-  "sha256": "21f271254bcaaef77de81dd14cb946e4f3d11c572a9decc2e81723f9e411e724",
-  "size": 30282065,
-  "publishedAt": "2026-11-14T16:28:54Z",
+  "changelog": "### 新增\n- **缓存自动备份到百度网盘**（设置 → 网盘 → 缓存备份到百度网盘）：\n  - **边听边缓存、边备份**：一章缓存落地就自动入队上传，队列落 SQLite，重启接着传；\n  - **官方开放平台接口**：设备码扫码授权 + access_token 自动续期（30 天，refresh_token 一次性、刷新单飞）；\n  - **标准化目录**：`我的应用数据/<产品名>/橘听备份/<书名>/`，首次备份自动建目录；\n  - **规范化文件名**：`0001 章节名.m4a`（四位序号 + 清洗后的章节名，非法字符替换、按 UTF-8 截断）；\n  - **封面与元数据**：每本书首次备份自动传 `cover.jpg` 与 `book.json`（书名/来源/书ID/备份时间）；\n  - **失败可控**：1 并发 + 300ms 间隔，失败退避 10s/60s/5min，5 次后置 failed 不阻塞其它书；鉴权失效（errno -6/111）立即暂停整个队列并提示重新授权。\n- 设置页内置**上传自检**：建目录 + 传一个 1KB 文件，直接告诉你哪一步失败（授权/目录权限/风控/空间）。\n\n### 说明\n- 官方接口的硬限制：第三方应用只能写 `/apps/{产品名}`（网盘里显示为「我的应用数据/产品名」），不能自定义到别的目录；\n- **不内置任何 AppKey / SecretKey / 产品名**：这些都由你在设置页自己填、存本机加密存储（SecureStore），App 里没有硬编码凭据；换应用或换手机就重新填一次；\n- 在开放平台建一次应用（实名 + 拿 AppKey/SecretKey），填进设置页后扫码授权即可；\n- 备份目录可以直接指给「网盘书库」当书库用，源失效了也能继续听。",
+  "sha256": "09be342a0e46d9fc37c290c20bbd1379669b42f13e8e76feccc72b0b867fd72d",
+  "size": 30413489,
+  "publishedAt": "2026-11-14T16:57:40Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.11.2/tingshu-1.11.2-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.12.0/tingshu-1.12.0-arm64.apk"
   ]
 }
