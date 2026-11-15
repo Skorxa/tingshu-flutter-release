@@ -1,12 +1,12 @@
 {
-  "versionName": "1.16.1",
-  "versionCode": 11601,
+  "versionName": "1.16.2",
+  "versionCode": 11602,
   "force": false,
-  "changelog": "### 新增\n- **酷我系音源支持专辑简介**（北极听书 / 飞鸟·酷我 / 青天·酷我 / 酷我畅听）：\n  - 长按封面弹「简介」面板，显示专辑的文字简介（酷我 `albuminfo` 的 `info` 字段，纯文本、多段落）；\n  - 北极听书的搜索列表改为真实简介（原来只能显示「共 N 集」占位）；\n  - 青天·酷我在目录接口没简介时自动补拉一次 `/detail`（书架/收藏直接进来也能看）。\n- **懒人系音源支持图文简介**（飞鸟·懒人听书 / 唔语·懒人听书 / 酷我畅听版懒人）：\n  - 从懒人 `getBookInfo` 的 `extraInfos` 拼接「编辑推荐 / 内容概述 / 作者简介 / 主播简介 / 听友说」富文本，长按封面即可看到带图简介（图床 `bookpic.lrts.me`）；\n  - 按书缓存，只在需要时拉取，不额外拖慢目录。\n\n### 优化\n- 「简介 / 简介图」面板文案按内容自适应：纯文字简介显示「简介」，有图时显示「简介图」；取不到内容时提示「这本书暂时没有简介」而不是「没有取到简介图」。",
-  "sha256": "62d6ed98952275516cac0d73aabeaa4672752b1c97f04d74df7e8ea084e87f9f",
+  "changelog": "### 新增\n- **简介显式入口**：目录页书籍信息行加「简介 / 简介图」按钮（有简介才显示，有图显示图标），播放页顶栏加「简介」信息按钮；不用再靠长按封面，点一下即可打开简介面板。长按封面仍然保留。\n\n### 修复\n- **系统媒体控件（通知栏 / 控制中心 / 流体云 / 锁屏封面）的\"上一集 / 暂停 / 下一集\"点击无效**：\n  - 显式接管 `click()` 媒体键入口，按真实播放状态路由到播放/暂停、上一集、下一集（不再依赖可能过期的 `playbackState`）；\n  - `broadcast()` 把上一集/下一集/播放暂停等传输动作一并登记进 `systemActions`，避免部分 ROM 上按钮能显示却点不动；\n  - 切章时立刻重播 `PlaybackState`，首/末集的按钮可用性即时刷新；\n  - 为所有媒体命令补充\"媒体命令：xxx\"运行日志，便于后续定位（设置 → 关于与诊断 → 运行日志）。",
+  "sha256": "5ff249771895cf9cd54eefe77f7cd18494d2e17bb8b99de093a2a2f68814f9df",
   "size": 30547897,
-  "publishedAt": "2026-11-15T06:04:05Z",
+  "publishedAt": "2026-11-15T06:44:35Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.16.1/tingshu-1.16.1-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.16.2/tingshu-1.16.2-arm64.apk"
   ]
 }
