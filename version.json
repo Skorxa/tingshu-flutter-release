@@ -1,12 +1,12 @@
 {
-  "versionName": "1.14.0",
-  "versionCode": 11400,
+  "versionName": "1.15.0",
+  "versionCode": 11500,
   "force": false,
-  "changelog": "自动构建版本 1.14.0",
-  "sha256": "78b8079d28fdaeea6adacef2e47518ef9b519ef38767d1370c50250ab7aeff20",
+  "changelog": "### 优化（省电，功能不变）\n- **缓存倒计时不再每秒唤醒**：剩 1 分钟以上 10 秒一跳、最后一分钟 5 秒、最后 10 秒才 1 秒一跳；缓存停下 ticker 自动停。\n- **定时关闭不再每 30 秒重建整页**：睡眠倒计时改用 `ValueListenable`，只有那一行按钮的文字会刷新。\n- **唔语自动任务不再空转**：三个开关全关时**根本不起定时器**（原来固定 60 秒轮询、一天几百次请求）；有开关时按「下一朵花还有多久」动态排期（30 秒–5 分钟）；App 在后台不跑。\n- **备份队列改事件驱动**：入队才唤醒，队列空立即停表（原来 2 秒空转）。\n- **WebDAV 后台不主动同步**：退到后台直接跳过 tick，回前台照常。\n- **后台播放省一点**：位置通知从 500ms 放宽到 2s（前台仍 500ms，听感无差别）。\n\n### 说明\n- 进度条原本就只订阅 `positionListenable`，这次确认了它不会带动整页重建，所以没再拆页面结构。\n- 省电改动全部是「降频/少空转」，没有改任何播放、缓存、同步的行为；`batterystats` 对比留给你实测。",
+  "sha256": "29f107449755fa330b8404099493675ae3a0c3dda4886294dffb91a081b6d96a",
   "size": 30479173,
-  "publishedAt": "2026-11-15T02:13:20Z",
+  "publishedAt": "2026-11-15T03:04:33Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.14.0/tingshu-1.14.0-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.15.0/tingshu-1.15.0-arm64.apk"
   ]
 }
