@@ -1,12 +1,12 @@
 {
-  "versionName": "1.13.1",
-  "versionCode": 11301,
+  "versionName": "1.14.0",
+  "versionCode": 11400,
   "force": false,
-  "changelog": "### 修复\n- **抽奖结果被误当成奖品名**：服务端「今天已经抽过」也是 HTTP 200，只是 `data` 为空、`msg` 写着原因；以前直接把 `msg` 拼成「抽中 您今天已经抽过奖了」。现在区分 `prizeName` 与 `alreadyDrawn`：\n  - 真抽到 → 记录「抽中 畅听1天!」；\n  - 已经抽过 → 记录提示、标记今天已抽，12 小时内不重复记。\n- **「未到领取时间」把记录刷屏**：自动领花原本每 60 秒试一次，每次都记一条失败（截图里 08:37~08:40 连刷 5 条）。现在：\n  - 服务端说没到时间 → **退避 1 分钟**再试，不再每秒级重试；\n  - 同一条失败原因 **30 分钟内只记一次**，记录不再被同一条消息淹没。\n- 记录列表里失败项**直接显示原因**（「未到领取时间」「您今天已经抽过奖了」），不再只有干巴巴的「领花失败」。",
-  "sha256": "c19f4ba3d04ad29179f7011900035f3fc6dcec13e01972b050ceaad89397afe7",
+  "changelog": "自动构建版本 1.14.0",
+  "sha256": "78b8079d28fdaeea6adacef2e47518ef9b519ef38767d1370c50250ab7aeff20",
   "size": 30479173,
-  "publishedAt": "2026-11-15T00:55:44Z",
+  "publishedAt": "2026-11-15T02:13:20Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.13.1/tingshu-1.13.1-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.14.0/tingshu-1.14.0-arm64.apk"
   ]
 }
