@@ -1,12 +1,12 @@
 {
-  "versionName": "1.19.1",
-  "versionCode": 11901,
+  "versionName": "1.19.2",
+  "versionCode": 11902,
   "force": false,
-  "changelog": "### 修复（1.19.0 上线后暴露的问题）\n- **「发现页音源」整页白屏**\n  - 原因：`ReorderableListView` 要求每个 child 带 key，而说明文字被塞进了 `children`，\n    在 `_itemBuilder` 里 `Key!` 空断言崩溃（日志里 17 次 `Null check operator used on a null value`）；\n  - 说明文字移到 `header`，空列表项也补了 key。\n\n- **喜马榜单不显示封面**\n  - 原因：榜单接口返回的是 `storages/xxx.png`、`group76/xxx.jpg` 这类**相对路径**，\n    而 `Album.fromApi` 只接受 http(s) 绝对地址，于是 `coverUrl` 全是 null；\n  - 现在统一补成 `https://imagev2.xmcdn.com/...`，顺带把 http 的旧图升级到 https。\n\n- **「喜马榜单」被当成当前音源，导致目录一直报错**\n  - 现象：日志反复出现「「喜马榜单」仅用于浏览榜单，请点进具体专辑收听」；\n  - 原因：榜单源注册成了普通内置源，点书时被 `setActive`，之后目录/搜索都走它；\n  - 现在给 `BuiltinSource` 加了 `discoverOnly` 与 `bookSourceId`：\n    榜单源标记为「仅浏览」，点书时自动改用**内置喜马**打开，`setActive` 也会拒绝它。\n\n- **榜单页一次拉全部分类（很慢）**\n  - 之前会把该榜单下 13–27 个分类全部请求一遍（热播榜 27 次网络请求）；\n  - 现在只加载当前选中的分类，切换分类时才请求。\n\n- **发现页榜单 Tab 滑动异常**\n  - 原因：榜单页自带滚动，又被嵌进外层 `CustomScrollView` 的固定高度容器，两层滚动互相吃手势；\n  - 现在「推荐 / 榜单」改成整体切换正文，不再嵌套滚动视图。\n\n- **评价页拿不到评论**\n  - 原因一：`order` 参数传了 `like_desc`，站点直接返回**空列表**；\n    实测只有 `content-score-desc` 有真实评论（`time-desc` 只回 1 条）；\n  - 原因二：评论字段名全对不上 —— 真实是 `commentId` / `likes` / `smallHeader` /\n    `createdAt`（毫秒时间戳）/ `newAlbumScore`（10 分制）/ `replyCount` / `region`；\n  - 现在评论能正常显示，并补上「地区」「回复数」，评分按 10 分制换算成 5 星。\n\n### 优化\n- 发现页「推荐 / 榜单」切换移到标题下方独立一行，不再占用 AppBar 的 bottom 区域。",
-  "sha256": "f2bb27a0338aebd3fe8c1dd87a2dafdb45a452bfc0d7c0523f7db06d70555485",
+  "changelog": "### 优化（发现页顶部布局）\n- **去掉「发现」大标题**，省下一整行竖向空间给内容；\n- **去掉中间那条「当前音源」宽胶囊**（它和下方的音源 chips 重复，且宽度被拉满、右侧留白）；\n- **「每行个数 / 刷新」两个按钮上移**，与「推荐 / 榜单」同一行、靠右对齐；\n- 结果：顶栏从 3 行压到 1 行，书单区域多出约 100dp 的可见高度。\n\n### 说明\n- 「每行个数 / 刷新」只在「推荐」Tab 显示；「榜单」Tab 自带下拉刷新，不需要这两个按钮。",
+  "sha256": "65a7f7215521234b42958c92c0a19ea36b79be0e6a8323a7d0dfb86aa8885da7",
   "size": 30810757,
-  "publishedAt": "2026-11-17T02:36:22Z",
+  "publishedAt": "2026-11-17T12:23:50Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.19.1/tingshu-1.19.1-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.19.2/tingshu-1.19.2-arm64.apk"
   ]
 }
