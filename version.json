@@ -1,12 +1,12 @@
 {
-  "versionName": "1.25.1",
-  "versionCode": 12501,
+  "versionName": "1.25.2",
+  "versionCode": 12502,
   "force": false,
-  "changelog": "### 修复：「关注的主播」报「请求地址不受支持」\n- 根因：`XmlyClient._endpoint` 里 `searchOrigin` 分支**在前面就 return** 了，\n  而我把 `/revision/user/basic`、`/revision/user/following` 加在了后面的\n  mobile 分支里 —— 永远走不到；\n- 同时 `POST /fans/follow` 也没进 `_endpoint` 的 POST 白名单（之前加错了地方，\n  加到了另一个用途的 `readOnly` 判断里）；\n- 两处都已修正，并补了**白名单回归测试**（0 项 → 9 项）：\n  - searchOrigin 的 5 条路径逐条断言允许 GET、拒绝 POST；\n  - 未列出的 web 路径一律拒绝；\n  - 主播接口的时间戳必须是纯数字（防路径注入，`ts-abc`、`../secret` 都拒绝）；\n  - 关注主播只允许 POST。\n\n### 说明\n- 日志里另一条 `lite-mobile/index/v1/modules/...pageId=2` 的\n  `Software caused connection abort` 是网络瞬断，不是白名单问题。",
-  "sha256": "3f47f31fba7db17f35071bc88991e1413d65df8a7e4a35cc2f5934c194acdb6f",
+  "changelog": "### 修复：多账号下书库页会串数据\n- **问题**：橘听有「按书分配账号」——播放某本书时会把当前账号切到该书绑定\n  的那个。而书库页的「听更新 / 订阅 / 收藏」是按 tab 缓存的，**不分账号**，\n  于是会看到「账号栏显示 B，列表还是 A 的订阅」，点进专辑还会用 B 账号解析。\n- **三处修复**：\n  1. 列表数据绑定账号：检测到 `activeIdentity` 变化就清空所有 tab 的缓存、\n     重置分页，并重新拉当前 tab；\n  2. **请求竞态防护**：请求发出后若账号被切走，返回的数据直接丢弃，\n     不写进列表（否则 A 的订阅会混进 B）；\n  3. 「关注的主播」页显式绑定**打开时**的账号 uid，不随播放切换。\n\n### 说明\n- 书库页的账号语义是「当前活动账号」：顶部账号栏显示的就是它，\n  列表永远跟着它走；\n- 评价页用的是匿名接口，不受多账号影响；\n- 主播页的关注按钮落在当前活动账号上（跟随正在播放的书）。",
+  "sha256": "a00e6841e627ad20e706ab34e959e2add90bbefbcb66182eefd42a972f2c9817",
   "size": 30876709,
-  "publishedAt": "2026-11-18T07:38:15Z",
+  "publishedAt": "2026-11-18T07:55:20Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.25.1/tingshu-1.25.1-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.25.2/tingshu-1.25.2-arm64.apk"
   ]
 }
