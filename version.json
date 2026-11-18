@@ -1,12 +1,12 @@
 {
-  "versionName": "1.23.1",
-  "versionCode": 12301,
+  "versionName": "1.24.0",
+  "versionCode": 12400,
   "force": false,
-  "changelog": "### 移除：端侧语音文稿（实测效果不达预期）\n1.22.0–1.23.0 试做了「边听边看文稿」，真机测试后文字质量达不到可用标准\n（有声书场景错字多、断句碎），**整块功能已移除**：\n\n- 删除播放页封面上的「文稿」入口；\n- 删除设置里的「语音文稿」页（引擎/模型下载、自检）；\n- 删除全部相关代码：模型下载与解压、原生库加载通道、`MediaCodec` 解码、\n  转写编排与切句、下载镜像回退；\n- 移除 `sherpa_onnx` 与 `archive` 依赖，APK 不再包含任何语音相关资产\n  （体积回到 29.7MB，与未接入时一致）。\n\n### 保留\n- `android/gradle.properties` 的堆内存修正（`-Xmx8G` → `-Xmx4G`）**保留**：\n  原配置要求 12GB，在 8GB 机器上必被 OOM 杀掉，这是与语音功能无关的真实缺陷。",
-  "sha256": "d7d46a5096aad48faa56710f01627b0159e461783defab9b9a02875f91be9a72",
-  "size": 30810917,
-  "publishedAt": "2026-11-18T06:13:16Z",
+  "changelog": "### 评价页做细（对齐上游）\n- **排序切换**：「综合」（站点按内容质量排序）/「最新」；\n- **分页**：滚到底自动加载下一页，末尾显示「没有更多了」；\n- **回复**：\n  - 列表里直接给**首条回复预览**（站点内嵌，零额外请求）；\n  - 点「N条回复」进二级回复页，二级页顶部固定原评价作为上下文；\n  - 回复支持分页加载，二级回复显示「回复 xxx」；\n- **精华标记**：站点标为精华的评价加「精华」角标；\n- 下拉刷新整个列表。\n\n### 新增：主播页\n- **点详情页的主播名**（带下划线和 `>` 提示）→ 进入主播页；\n- 主播页包含：\n  - 背景图 + 头像 + 昵称 + 认证头衔 + 等级 + 地区 + 简介；\n  - 粉丝 / 专辑 / 声音 三项统计；\n  - **关注 / 已关注**按钮（需登录喜马，点击后粉丝数实时增减）；\n  - **该主播的专辑列表**，滚到底自动加载下一页，点进直达专辑详情。\n- 未登录时按公开接口显示资料，专辑列表处提示「登录后可查看」。\n\n### 接口\n- 新增 4 个接口（均进 `XmlyClient._endpoint` 锚定白名单）：\n  - `/album-comment-mobile/ipad/album/comment/reply/list/query/{ts}`（回复，匿名）\n  - `/mobile-user/v3/artist/homepage/ts-{ts}`（主播资料，登录）\n  - `/mobile-user/v3/artist/album/ts-{ts}`（主播专辑，登录）\n  - `/revision/user/basic`（公开资料，匿名）\n  - `POST /fans/follow`（关注，登录，signed）",
+  "sha256": "9f77a8e3376e088d324fe0b160c0e6d028d0a40423140f9a7bd7d456b0d224ff",
+  "size": 30876597,
+  "publishedAt": "2026-11-18T06:42:14Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.23.1/tingshu-1.23.1-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.24.0/tingshu-1.24.0-arm64.apk"
   ]
 }
