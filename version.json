@@ -1,12 +1,12 @@
 {
-  "versionName": "1.25.0",
-  "versionCode": 12500,
+  "versionName": "1.25.1",
+  "versionCode": 12501,
   "force": false,
-  "changelog": "### 喜马拉雅书库页新增三个栏目（对齐官方 App「我的收听」）\n- **听更新**：订阅专辑的最新声音动态，带「几分钟前 / 几天前」时间，点进专辑；\n- **订阅**：已订阅的专辑，显示「更新到 第N集」和**未读数角标**；\n- **收藏**：收藏过的声音，带收藏时间；\n- 三个栏目各自独立分页，滚到底自动加载，切栏目不会丢进度；\n- 页面首次打开自动加载「听更新」，不用先点一下。\n\n### 新增「关注的主播」入口\n- 书库页右上角「关注的主播」→ 独立列表页；\n- 每行显示头像、昵称、认证、粉丝数、专辑数；\n- 点进去就是主播页（资料 + 关注 + 专辑列表）；\n- 滚到底自动加载下一页。\n\n### 交互细节\n- 搜索框有内容时优先显示搜索结果；\n- **清空搜索框会自动回到当前栏目**，不用手动切。\n\n### 接口\n- 新增 2 个（均进白名单）：\n  - `/lite-mobile/like/v1/user-likes`（收藏的声音，需登录）\n  - `/revision/user/following`（关注的主播列表，匿名可读）",
-  "sha256": "ca0eef28ae913d5c514dc7260d0aee72cf27c7274529538d497c392300902e04",
+  "changelog": "### 修复：「关注的主播」报「请求地址不受支持」\n- 根因：`XmlyClient._endpoint` 里 `searchOrigin` 分支**在前面就 return** 了，\n  而我把 `/revision/user/basic`、`/revision/user/following` 加在了后面的\n  mobile 分支里 —— 永远走不到；\n- 同时 `POST /fans/follow` 也没进 `_endpoint` 的 POST 白名单（之前加错了地方，\n  加到了另一个用途的 `readOnly` 判断里）；\n- 两处都已修正，并补了**白名单回归测试**（0 项 → 9 项）：\n  - searchOrigin 的 5 条路径逐条断言允许 GET、拒绝 POST；\n  - 未列出的 web 路径一律拒绝；\n  - 主播接口的时间戳必须是纯数字（防路径注入，`ts-abc`、`../secret` 都拒绝）；\n  - 关注主播只允许 POST。\n\n### 说明\n- 日志里另一条 `lite-mobile/index/v1/modules/...pageId=2` 的\n  `Software caused connection abort` 是网络瞬断，不是白名单问题。",
+  "sha256": "3f47f31fba7db17f35071bc88991e1413d65df8a7e4a35cc2f5934c194acdb6f",
   "size": 30876709,
-  "publishedAt": "2026-11-18T07:21:51Z",
+  "publishedAt": "2026-11-18T07:38:15Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.25.0/tingshu-1.25.0-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.25.1/tingshu-1.25.1-arm64.apk"
   ]
 }
