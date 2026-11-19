@@ -1,12 +1,12 @@
 {
-  "versionName": "1.27.1",
-  "versionCode": 12701,
+  "versionName": "1.27.2",
+  "versionCode": 12702,
   "force": false,
-  "changelog": "### 修正：UA 改成「对齐上游」，而不是全局统一\n1.27.0 我给所有请求统一了一个 UA，查了上游之后发现**方向错了**——\n上游是**差异化 UA**：\n\n| 场景 | 上游的做法 | 橘听现在 |\n|---|---|---|\n| 大多数 mobile 接口 | **不设 UA** | 不设（已回退） |\n| collector 域 | `ting_3.4.10.3(Android,30)` | 同 |\n| 专辑概览接口 | `ting_3.4.10.3(Android,30)` | 同（`/mobile-album/album/plant/*`） |\n| 音频探测 | `XMPlus/1.0` | `ting_3.4.10.3(Android,30)`（不冒充别家客户端） |\n| 登录流程 | `ting_9.5.1(M2102J2SC,Android31)` + 设备指纹 Cookie | **早就是这个，未改** |\n\n原因：站点对大多数接口不校验 UA，硬塞一个 UA 反而可能与「该版本应有的参数」\n不一致；而上游这套是长期跑通的组合。\n\n### 保留（1.27.0 的风控加固依旧有效）\n- 全局串行闸 + 300ms 最小间隔（static 共享，多账号一起限速）；\n- 限流只重试 1 次，冷却 30s → 90s → 300s，成功清零；\n- 冷却表全局共享；\n- 不再调用实测 404 的收藏专辑接口。",
-  "sha256": "781a9ee66e114dc7edf2252a63f61ed4ab12c88bc391c1270d385b46eaa68f16",
-  "size": 30876709,
-  "publishedAt": "2026-11-18T08:48:02Z",
+  "changelog": "### 修复：关注主播报 500\n- 根因：`POST /fans/follow` 有**两个**必填项，1.26.1 只补了签名，还漏了编码：\n  | 项 | 作用 | 缺失后果 |\n  |---|---|---|\n  | `signed: true` | 带 `x-tk` 票据 | 500 |\n  | **`form: true`** | body 用 `x-www-form-urlencoded` | **500**（本次修复）|\n- 上游对这个接口一直同时用这两个，橘听之前发的是 JSON body，服务端解析不了。\n- 顺手补了上游有、橘听缺的一个防御：**不能关注自己**（本地拦截，给明确提示，\n  而不是等收到 500）。\n\n### 说明\n- 已核对两边的签名逻辑（`XmlyCrypto.freshTicket` 的默认票据属性和兜底串）\n  **完全一致**，所以问题不在签名。\n- 写操作（POST）在橘听里本来就不会重试 5xx，因此关注失败只发一次请求，\n  不会因为重试造成重复关注。",
+  "sha256": "9e713a378a7bc6b4d8c07568cf2a827578b5fe43a7e1f01e5a31cb8ddc665b35",
+  "size": 30876705,
+  "publishedAt": "2026-11-19T14:14:33Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.27.1/tingshu-1.27.1-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.27.2/tingshu-1.27.2-arm64.apk"
   ]
 }
