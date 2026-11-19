@@ -1,12 +1,12 @@
 {
-  "versionName": "1.27.3",
-  "versionCode": 12703,
+  "versionName": "1.27.4",
+  "versionCode": 12704,
   "force": false,
-  "changelog": "### 优化：关注主播被限流时的表现\n1.27.2 修好 `form` 编码后，错误从 **500** 变成了明确的业务码：\n\n```\nret=3001 —— 目前关注频率过高，可稍后再试噢~\n```\n\n说明请求本身已经合法，剩下的是**站点对关注操作有频率限制**。这版做三件事：\n\n- **把 `ret=3001` 这类归到 `rate_limited`**\n  - 之前所有非 0 的 ret 都被当成「请求被拒」硬失败，于是既不复用冷却策略，\n    提示也是原始的 `喜马拉雅拒绝了请求（ret=3001，…）`；\n  - 现在按 ret 码（3001/3002/3003/429）或文案（频率/频繁/稍后再试/太快）\n    识别，命中就走已有的限流冷却（30s → 90s → 300s）。\n- **写操作绝不重试**：关注这类 POST 万一第一次其实已生效，重试会造成\n  重复关注，所以遇限流直接抛，不再试第二次。\n- **关注按钮加 60 秒本地冷却**：被限后按钮变「稍后再试」并禁用，\n  避免你继续点把风控拖得更久；提示文案也换成\n  「关注太频繁了，等一会儿再试（喜马有限制）」。\n- **失败后对账，不重放写请求**（照上游的做法）：\n  - 站点有时「操作其实已生效，但返回限流」；\n  - 所以失败后不重发关注，而是**重新读一次主播资料**，\n    如果读到的关注状态已经等于期望值，就直接当作成功（清掉错误提示）；\n  - 注释原话：`Reconcile uncertain writes with a read; never replay a follow request.`\n  - 这也解释了你看到的现象：可能早就关注上了，只是响应被限流。\n\n### 说明\n- 这是**服务端策略**，与橘听无关：短时间内关注/取关多次必然触发。\n  换账号或等几分钟就会恢复。",
-  "sha256": "e0e49cd1e71ef6b8a8fb72e8dae57ebb9b897979c955f30ca5f941c407a2585a",
+  "changelog": "### 内置：上游剩余的指纹/请求头差异（重新拉了最新 dev 逐行对比）\n把 XMPlus 最新 `dev`（1.2.4+）的请求构造逐项比对了一遍，**设备指纹本体已经一致**，\n剩下三处橘听缺的现在也内置了：\n\n| 项 | 上游 | 橘听之前 | 现在 |\n|---|---|---|---|\n| **设备 id** | 每次启动 `Uuid().v4()`，登录后固化成 credentials | 一致 | 一致 |\n| **登录 Cookie 指纹** | `1&_device=android&…;channel=and-d10;impl=…;osversion=31;device_model=M2102J2SC;manufacturer=Xiaomi;` | 一致 | 一致 |\n| **`context()`** | uid / token / device / deviceId / version / channel / impl | 一致 | 一致 |\n| **web 接口 `Origin`+`Referer`** | ✅ 带 | ❌ 缺 | ✅ 已补 |\n| **播放页票据属性** | `b=lite&s=play&u=<uid>` | ❌ 用默认 `lite_track_play_url` | ✅ 已区分 |\n| **账号切换保护** | `runWithAccount` 串行 + 暂停检查 | ❌ 无 | ✅ 发起前记 uid、返回后校验 |\n\n第三项尤其重要：橘听有「按书分配账号」，播放别的书会把当前账号切走。\n关注时如果不校验，操作可能落到另一个账号上。\n\n### 关于 `ret=3001`（关注频率过高）——这条改代码解决不了\n- 请求格式和指纹都已对齐上游，`3001` 是**服务端按账号 + IP 统计**的限流；\n- 上游看起来「正常」，是因为它没被连着点过；\n- 能做的只有：**不重试、失败后读对账、按钮 60 秒冷却**（1.27.3 已做），\n  以及**等**（通常几分钟到几小时自动解除）。\n- 想快速确认是「账号被标记」还是「IP 被标记」，**换另一个喜马账号点一次**\n  就知道了：换账号正常 → 账号级；换账号也 3001 → IP 级。",
+  "sha256": "62a59666f41baf5134584379c48faf41a1340f8b7f43596a6e83dc14ed22ab17",
   "size": 30876709,
-  "publishedAt": "2026-11-19T14:35:34Z",
+  "publishedAt": "2026-11-19T15:22:22Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.27.3/tingshu-1.27.3-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.27.4/tingshu-1.27.4-arm64.apk"
   ]
 }
