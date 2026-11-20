@@ -1,12 +1,12 @@
 {
-  "versionName": "1.29.2",
-  "versionCode": 12902,
+  "versionName": "1.29.3",
+  "versionCode": 12903,
   "force": false,
-  "changelog": "### 借文稿：加演播者匹配 + 封面\n之前只比书名，容易借到「不同演播」的版本（时间轴对不上）。现在：\n\n- **书名**必须相似（归一化后相同，或一方包含另一方且长度差 ≤4）\n- **演播者**算相似度 0~1：\n  - 完全一致 → 1.0\n  - 一方包含另一方 → 0.85\n  - 多人串（`A、B、C`）按分隔符拆开算覆盖率\n  - 双方都没填 → 0.5（中性，不扣分）\n- 排序：**演播者相似优先**，其次集数接近\n- 候选列表显示**封面图**（有些书跨平台封面一致，能一眼确认）\n- 演播者高度一致时标注「演播者一致，时间轴最可能对得上」\n\n`PlayerService` 新增 `bookAuthor` 字段，从目录页播放时带过来。\n\n### 修复：LX 解析出的音频地址缺请求头\n日志里播放 QQ 的书报 `(0) Source error`。原因是聆澜只返回一个 URL 字符串，\n而 QQ/酷狗的 CDN 校验 Referer/UA。现在按平台补默认请求头：\n\n| 平台 | 补的 header |\n|---|---|\n| kw | `User-Agent: okhttp/4.9.0` |\n| tx | `User-Agent: <PC>`, `Referer: https://y.qq.com/` |\n| kg | `User-Agent: <PC>` |\n\n脚本自己给了 headers 就合并（脚本优先）。\n\n### 搜索：QQ 改用移动版接口 + 失败重试\n研究 Q-music 的搜索实现，学到两点：\n\n1. 它用的是 **`DoSearchForQQMusicMobile`**（移动版），不是 Desktop 版。\n   QQ 对 Desktop 版限制更严（我们实测经常整段返回空）。\n2. 参数必须完整：`searchid` / `highlight` / `nqc_flag` / `multi_zhida` /\n   `cat` / `grp` / `sin` / `sem`，少一个都可能被判无效。\n\n现在 QQ 搜索：\n- 改走 Mobile 版接口，参数补齐\n- **失败或返回空时自动重试一次**（QQ 会偶发返回空，重试大多能出）\n\n### 改进：QQ 目录顺序\n`GetAlbumSongList` 的 `order` 参数从 `1` 改成 `0`（实测 `order=1` 时返回的\n集号是乱的：2536/2539/2540/2531）。另外第 1 页如果集号不从 1 开始会打一条\n诊断日志，方便判断是服务端排序问题还是本地排序问题。\n\n### 降噪\n源没实现 `getLyrics` 时（如唔语源）不再每次切章都记一条 INFO，\n否则日志被「取文稿失败或源不支持」刷满。",
-  "sha256": "b9e957a9fdf1729cd998ea00e57752275d8702bc494543fe5cd7388df74dc2f4",
-  "size": 31028991,
-  "publishedAt": "2026-11-20T05:58:36Z",
+  "changelog": "### 紧急修复：导入 LX 后搜索全报 `UA_PC is not defined`\n```\nException: 音源解析失败: ReferenceError: 'UA_PC' is not defined\n```\n\n**根因**（我 1.29.2 引入的）：给音频补平台请求头时，我在 `lx_shim.js` 里直接用了\n`UA_PC`，但那个常量定义在 `book_adapters.js` —— **两个文件是独立作用域**，取不到。\n\n因为 `getAudioUrl` 那段我之前没单独测（只测了「加载脚本」），所以漏了。\n\n**修复**：`lx_shim.js` 自己定义 `UA_PLAYER`，不再跨文件取值。\n同时检查了整个文件，没有其它跨文件引用。\n\n### 验证\n```\n=== 加载 LX 脚本\n  可用平台: kg,kw,tx | 声明: kg,kw,mg,qs,tx,wy\n=== 搜索\n  8 条                    ← 三家适配器都参与，比之前 4 条多一倍\n=== 目录\n  [2] 第0002集 妖物作祟 (上)   ← QQ 版本，order=0 后顺序正常\n=== 解析音频\n  成功: {\"url\":\"...\",\"headers\":{...}}   ← headers 正常带上\n```",
+  "sha256": "b3d235445abb927ae7c32933430b3bded81611f1195587f20ee8aa089bd5ea39",
+  "size": 31029195,
+  "publishedAt": "2026-11-20T06:38:45Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.29.2/tingshu-1.29.2-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.29.3/tingshu-1.29.3-arm64.apk"
   ]
 }
