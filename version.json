@@ -1,12 +1,12 @@
 {
-  "versionName": "1.33.1",
-  "versionCode": 13301,
+  "versionName": "1.33.2",
+  "versionCode": 13302,
   "force": false,
-  "changelog": "### 修复：导入多个 LX 脚本后「识别不到源」\n原来聚合源是**挑一个**成员脚本转发。只要那个脚本注册失败（语法错、协议版本不对、\n或者当时网络异常没加载成功），整个搜索就报「音源未开启」—— 表现出来就是\n「导入多了反而一个都用不了」。\n\n**现在逐个尝试**：\n\n```dart\n从轮询游标开始遍历成员脚本：\n  第 1 个成功 → 用它\n  失败 → 换下一个\n  全失败 → 抛出最后一次的错误，并记一条日志（含失败脚本 id）\n```\n\n好处：\n- 一个脚本坏了不影响其他\n- 轮询起点每次都往后挪，请求天然分散（负载均衡）\n- 真全挂了，日志能直接看出是哪些脚本失败\n\n### 修复：原生源匹配了文稿，但播放页不显示\n之前只有**全屏文稿页**有「借文稿 + 自动沿用」的逻辑，**播放页的内嵌文稿区没有**。\n所以喜马这类原生源：点右上角能看到文稿，但播放页那块是空的。\n\n现在内嵌区也会：\n1. 主源没字幕 → 查这本书之前记住的候选\n2. 有就自动拉取并显示\n\n两边用的是同一份记忆（`LyricsMatcher.recall`），不会出现割裂。",
-  "sha256": "8a92015c5104c06b7b6845689d90783a3fb50aac5269789377dbba7814582ec4",
-  "size": 31033011,
-  "publishedAt": "2026-11-20T11:09:57Z",
+  "changelog": "### 真正的根因：`getChaptersFromSource` 漏了聚合分流\n1.33.1 我以为修好了，但日志显示：\n\n```\n[19:13:14] 音源搜索完成  音源: 洛雪聚合听书  新增结果: 36    ← 搜索成功\n[19:13:16] 已切换音源 洛雪聚合听书\n[19:13:17] 目录第 1 页加载失败  Exception: 音源未开启        ← 目录失败\n```\n\n**搜索成功、目录失败** —— 说明只有搜索那条路接了聚合分流。\n\n查下来：四个入口里**只有 `getChaptersFromSource` 没接**：\n\n| 方法 | 分流 |\n|---|---|\n| `searchFromSource` | ✅ |\n| **`getChaptersFromSource`** | ❌ **漏了** |\n| `getAudioUrlFromSource` | ✅ |\n| `getLyricsFromSource` | ✅ |\n\n我上一版的批量替换用了一段「假设存在」的文本做锚点，没匹配上却静默跳过了。\n这次用 grep 逐个确认了行号（97/168/225/270 各一处），四个入口都有。\n\n### 同时做的防御\n- `lxMembers()` 排除聚合源自身（`_kindOf('lx_pool')` 也返回 'lx'，\n  不排除会让聚合源把自己当成员 → 递归）\n- `_runOnPool` 里再过滤一次，兜底\n- 全失败时记一条日志，列出失败的脚本 id\n\n### 播放页：修「文稿被进度条压住」\n你截图里最后一行「冬冥部的本家族人围聚在碉楼或是城墙之上，」**被进度条压住了**。\n\n根因是布局用了**固定高度**：\n\n```dart\n封面  → Expanded（吃满剩余）\n文稿  → SizedBox(height: 128)   ← 固定\n进度条/控制 → 固定\n```\n\n屏幕不够高时，`Expanded` 会抢空间，固定高度的文稿就被挤出去、压到进度条上。\n\n**改成按比例分配**：\n\n```dart\n封面  → Expanded(flex: 5)\n文稿  → Expanded(flex: 3) + ClipRect\n进度/控制 → 固定\n```\n\n两者一起收缩，**永远不会重叠**。\n\n**另外文稿行数改成动态**：用 `LayoutBuilder` 按实际可用高度算能放几行\n（`可用高度 / 行高`），小屏自动少显示几行，不再硬挤。\n\n### 播放页：封面按可用空间计算（学 Melora 的减法）\nMelora 的封面尺寸是**算出来的**，不是固定值：\n\n```kotlin\n// 先给文稿留位，剩下的才给封面\nval squareSide = minOf(maxWidth, maxHeight - lyricsHeight, 480.dp)\n```\n\n橘听之前是 `(side * 0.72).clamp(180, 300)` —— 在 `Expanded` 里用固定值，\n小屏时封面会把文稿挤出去（就是被进度条压住的原因）。\n\n**现在**：封面边长 = `实际可用短边 * 0.94`（clamp 120~320），\n永远不超过父级给的区域。\n\n### 参考：Haze 的玻璃效果\n你给的 [chrisbanes/haze](https://github.com/chrisbanes/haze) 是 Compose 的毛玻璃库，\n核心是「标记背景源 → 模糊那个源」：\n\n```kotlin\nImage(painter, Modifier.hazeSource(state))\nBox(Modifier.hazeBlur(input = HazeInput.Sources(state), style = ...))\n```\n\nFlutter 的等价物是 `BackdropFilter`。橘听当前用的是 `ImageFiltered` 模糊封面图本身 ——\n对「整页背景」效果一样，而且更省（封面是静态图，不用每帧采样）。\n\nHaze 的 **Glass（折射 + 高光）** 需要自定义 shader，Flutter 侧没有对等实现，\n这一档暂时做不到。",
+  "sha256": "1c5fbfd874faf981b7a11304066b96137075818e563b1f6bb5bb007d171533bb",
+  "size": 31098547,
+  "publishedAt": "2026-11-20T11:31:39Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.33.1/tingshu-1.33.1-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.33.2/tingshu-1.33.2-arm64.apk"
   ]
 }
