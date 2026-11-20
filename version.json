@@ -1,12 +1,12 @@
 {
-  "versionName": "1.37.0",
-  "versionCode": 13700,
+  "versionName": "1.38.0",
+  "versionCode": 13800,
   "force": false,
-  "changelog": "### 新增：手动匹配文稿\n自动匹配是按「书名 + 演播者 + 首集时长」猜的，猜不准时现在可以**自己搜、自己选**。\n\n文稿页顶部新增 `🔍` 按钮 → 进入「手动匹配」页：\n\n```\n┌─────────────────────────────┐\n│ ←  手动匹配文稿         ✕   │\n│ ┌─────────────────────────┐ │\n│ │ 🔍 青山              ✕  │ │\n│ └─────────────────────────┘ │\n│ 手动匹配不会做任何自动筛选，  │\n│ 你选哪本就借哪本的文稿。      │\n│                             │\n│  [封面] 青山|头陀渊演播|...  │\n│         头陀渊讲故事 · 1320集│\n│  [封面] 青山|多播有声剧|...  │\n│         魔法面包 · 500集     │\n└─────────────────────────────┘\n```\n\n**和自动匹配的区别**：\n\n| | 自动匹配 | 手动匹配 |\n|---|---|---|\n| 关键词 | 书名 + 演播者 + 组合词 | **你输入什么搜什么** |\n| 过滤 | 按书名 + 演播者 + 时长筛 | **不过滤** |\n| 结果 | 最多 6 个/源 | 每个源 30 个 |\n| 用时 | 有探测阶段（几秒）| 搜完即出 |\n\n选完直接用它的字幕，不满意可以再点 `🔍` 换，或者调「时间偏移」。\n\n### 新增：跳过片头片尾可以选择作用范围\n以前从播放页进来**永远是按本书设置**，想改全局默认只能跑去设置页。\n\n现在 sheet 顶部多了一个切换：\n\n```\n[ 仅这本书 ] [ 全局默认 ]\n```\n\n- **仅这本书** —— 只对当前书生效（每本书片头长度不同，这是常用场景）\n- **全局默认** —— 对所有书生效\n- 切换时会把另一端的**已保存值**读进来，滑块不会跳变\n\n后端本来就支持两级覆盖（`skipFor` 命中按书的值就用，否则回落全局），\n这次只是把入口做出来。",
-  "sha256": "9254b9f6aa6f70d4278efb5193e14ef1f64366f67abbcf5becde3822c25ced59",
+  "changelog": "### 新增：B 站字幕接入\n内置 B 站听书现在有文稿了，走 B 站**官方字幕轨**（不是语音转写）。\n\n**接口链路**（参考 PiliPlus 的实现，同为 Flutter）：\n\n```\nGET /x/player/wbi/v2?aid=&bvid=&cid=   ← 需 WBI 签名\n  → data.subtitle.subtitles[]          ← lan / lan_doc / type / subtitle_url\n  → subtitle_url 指向 JSON: {body:[{from, to, content}]}\n  → 转 LRC: [mm:ss.xx]content\n```\n\n**实现细节**：\n\n- 新增 `BiliApi.subtitles()` / `subtitleLrc()`\n- 字幕轨排序：**中文优先 → 非 AI 优先**（AI 字幕断句更碎，但有时是唯一可用的）\n- `BuiltinSource` 契约加可选 `getLyrics()`；B 站实现，喜马返回空串（走「借文稿」）\n- 接入后**内嵌文稿区、全屏文稿页、时间偏移**全部可用\n\n### 新增：第三方 B 站音源复用内置登录态\n`eprendre-bilibili` 这类 JS 音源自己做请求，拿不到橘听的登录 Cookie。\n\n现在橘听会在两个时机把 Cookie 递给 JS：\n\n| 时机 | 位置 |\n|---|---|\n| App 启动（JS 引擎就绪后） | `main.dart` |\n| B 站登录/刷新账号后 | `BiliAccountService.refreshFromNav` |\n\nJS 侧通过 `uni.getStorageSync('bili_cookie')` 读取（也给了 `bili_sessdata`），\n`eprendre-bilibili.js` 已改成自动带上 Cookie —— **用户不用在音源里再登录一次**。\n\n### 两个限制（必须知道）\n\n1. **需要登录**。未登录时 B 站对 `subtitles` 恒返回空，这是官方行为。\n2. **不是所有视频都有字幕**。UP 主上传的字幕、或 B 站已生成的 AI 字幕才有；\n   普通有声书视频很可能没有。没有时日志会记一条「该分P 没有字幕」。",
+  "sha256": "c3887c5a54445c7789c3bebea14c239f00419e7fabf474d6e1081b10b59ca540",
   "size": 31100255,
-  "publishedAt": "2026-11-20T14:44:58Z",
+  "publishedAt": "2026-11-20T15:18:39Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.37.0/tingshu-1.37.0-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.38.0/tingshu-1.38.0-arm64.apk"
   ]
 }
