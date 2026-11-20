@@ -1,12 +1,12 @@
 {
-  "versionName": "1.38.2",
-  "versionCode": 13802,
+  "versionName": "1.38.3",
+  "versionCode": 13803,
   "force": false,
-  "changelog": "### 修复：已导入的 B 站源取不到文稿（不用更新源了）\n**你问得对，但不用更新源订阅** —— 我改成自动兜底了。\n\n**根因**：你导入 `eprendre-bilibili` 时，它的**代码快照存在本地数据库**里。\n我后给 assets 里的 JS 加了 `getLyrics`，但**已导入的源用的是旧快照**，\n所以调不到那个方法。\n\n日志里能对上：`eprendre-bilibili` 能正常搜索/播放/嗅探，\n但**全程没有任何 `[Bili]` 或 `[LyricsMatch]` 记录** —— 说明字幕那条路压根没进。\n\n**改法：在 `SourceManager` 层做兜底，不依赖源是否实现 `getLyrics`**\n\n```\n调 JsEngine.call(sourceId, 'getLyrics')\n  ├─ 返回了非空 LRC  → 直接用\n  ├─ 抛「音源无方法」 → 兜底\n  └─ 返回空字符串     → 兜底\n\n兜底：从 chapterId 抠 bvid + cid\n      regex: \"bvid\":\"BV...\"  /  \"cid\":123\n      → BiliApi.subtitleLrcByBvidCid(bvid, cid)\n```\n\n**为什么能抠出来**：`eprendre-bilibili` 的 `chapterId` 是 JSON\n（缓存路径里能看到 `{\"bvid\":\"BV1nZ421Y7tw\",\"cid\":...}`），\nB 站源基本都用这个形态，直接复用。\n\n**效果**：**任何 B 站系 JS 源，不管导入时有没有 `getLyrics`，现在都能出文稿。**\n你不需要重新导入，也不需要更新订阅。",
-  "sha256": "b9c7f910d2b2c30bcf8893d4298ff42dbbe4c38495ac0ee78be1e3530951f07c",
+  "changelog": "### 修复：B 站源目录 412 风控\n字幕兜底生效了（日志里已经能看到 `[Bili] 兜底取到字幕`），但目录又卡住了：\n\n```\n[CatalogPager] 目录第 1 页加载失败\nException: HTTP 412 | api.bilibili.com/x/web-interface/view/detail?aid=&bvid=BV1XenF6rE6t\n```\n\n**412** 是 B 站风控拒绝。`eprendre-bilibili` 自己发的请求（UA/Cookie/Referer 组合）\n没有内置 B 站客户端那套完整（buvid 激活 + WBI + 风控兜底），所以被拦。\n\n**改法：跟字幕一样的兜底**\n\n```\nJS 源 getChapters 抛错\n  → 从 bookId 抠 bvid（正则 BV[0-9A-Za-z]{10}）\n  → BiliApi.detail(bvid) 拉分P\n  → 构造 CatalogResult\n```\n\n**关键细节**：兜底产生的 `chapterId` **仍按 B 站源的 JSON 格式**构造：\n\n```json\n{\"bvid\":\"BV1nZ421Y7tw\",\"cid\":1503046095,\"page\":1}\n```\n\n这样 `eprendre` 的 `getAudioUrl` 能正常解析（播放不受影响），\n字幕兜底也能从同一个 JSON 里抠出 bvid/cid。**三个环节用同一份 id 格式**。\n\n### 现在的 B 站能力矩阵\n\n| 环节 | 内置 B 站 | 已导入的 JS B 站源 |\n|---|---|---|\n| 搜索 | ✅ | ✅（源自己） |\n| 目录 | ✅ | ✅（412 时兜底） |\n| 播放 | ✅ | ✅（源自己，含嗅探） |\n| **文稿** | ✅ | ✅（兜底） |",
+  "sha256": "3f3cde65c18362fbea178ce69ac79aabf68d3c9067a30679d2e228c31dacb0bb",
   "size": 31100575,
-  "publishedAt": "2026-11-20T15:54:39Z",
+  "publishedAt": "2026-11-20T16:08:51Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.38.2/tingshu-1.38.2-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.38.3/tingshu-1.38.3-arm64.apk"
   ]
 }
