@@ -1,12 +1,12 @@
 {
-  "versionName": "1.27.4",
-  "versionCode": 12704,
+  "versionName": "1.28.0",
+  "versionCode": 12800,
   "force": false,
-  "changelog": "### 内置：上游剩余的指纹/请求头差异（重新拉了最新 dev 逐行对比）\n把 XMPlus 最新 `dev`（1.2.4+）的请求构造逐项比对了一遍，**设备指纹本体已经一致**，\n剩下三处橘听缺的现在也内置了：\n\n| 项 | 上游 | 橘听之前 | 现在 |\n|---|---|---|---|\n| **设备 id** | 每次启动 `Uuid().v4()`，登录后固化成 credentials | 一致 | 一致 |\n| **登录 Cookie 指纹** | `1&_device=android&…;channel=and-d10;impl=…;osversion=31;device_model=M2102J2SC;manufacturer=Xiaomi;` | 一致 | 一致 |\n| **`context()`** | uid / token / device / deviceId / version / channel / impl | 一致 | 一致 |\n| **web 接口 `Origin`+`Referer`** | ✅ 带 | ❌ 缺 | ✅ 已补 |\n| **播放页票据属性** | `b=lite&s=play&u=<uid>` | ❌ 用默认 `lite_track_play_url` | ✅ 已区分 |\n| **账号切换保护** | `runWithAccount` 串行 + 暂停检查 | ❌ 无 | ✅ 发起前记 uid、返回后校验 |\n\n第三项尤其重要：橘听有「按书分配账号」，播放别的书会把当前账号切走。\n关注时如果不校验，操作可能落到另一个账号上。\n\n### 关于 `ret=3001`（关注频率过高）——这条改代码解决不了\n- 请求格式和指纹都已对齐上游，`3001` 是**服务端按账号 + IP 统计**的限流；\n- 上游看起来「正常」，是因为它没被连着点过；\n- 能做的只有：**不重试、失败后读对账、按钮 60 秒冷却**（1.27.3 已做），\n  以及**等**（通常几分钟到几小时自动解除）。\n- 想快速确认是「账号被标记」还是「IP 被标记」，**换另一个喜马账号点一次**\n  就知道了：换账号正常 → 账号级；换账号也 3001 → IP 级。",
-  "sha256": "62a59666f41baf5134584379c48faf41a1340f8b7f43596a6e83dc14ed22ab17",
-  "size": 30876709,
-  "publishedAt": "2026-11-19T15:22:22Z",
+  "changelog": "### 新增：LX 音源（独立模块）\n设置 → 音源与内容 → **LX 音源**（与喜马拉雅/唔语同级），可导入 LX Music 2.x 规范的脚本。\n\n**它解决什么问题**：LX 脚本对网络平台只能解析音频地址（`actions: ['musicUrl']`），\n不能搜索、不能取目录。橘听按脚本声明的平台**自动补上目录能力**，所以导入即可用：\n\n```\n用户脚本(声明 kw/tx/kg)  →  橘听补搜索/目录/文稿  →  播放走脚本解析\n```\n\n| 能力 | 谁提供 |\n|---|---|\n| 搜索 / 目录 / 文稿 | 橘听（`book_adapters.js`，三家听书接口）|\n| 音频解析 | 用户导入的 LX 脚本 |\n\n界面会如实标注：`可搜索：kw`、`仅能解析：kg/tx/mg/qs/wy`。\n\n### 新增：三家听书适配器\n| 平台 | 搜索 | 目录 | 文稿 |\n|---|---|---|---|\n| 酷我 | `show_series_listen=1` 过滤长音频 | `album/albumInfo` | `songinfoandlrc` |\n| QQ | 按 `song_count` 筛听书 | `GetAlbumSongList` | `fcg_query_lyric_new` |\n| 酷狗 | 按 `songcount` 筛听书 | `album/song` | `lyrics.kugou.com` 两步 |\n\n章节会按集号重排（QQ/酷狗返回的顺序是乱的），主题曲/片花沉底。\n\n### 新增：逐句文稿\n播放页右上角加「文稿」按钮，半屏面板：\n- 当前句高亮 + 自动滚动跟随\n- 手动滚动后暂停 3 秒再恢复跟随\n- 点某句跳到对应时间\n- 无字幕时显示空态（不是报错）\n\n数据来自音源的 `getLyrics(chapterId)`（新增可选契约字段），\n酷我/QQ/酷狗的有声剧带 AI 字幕（首行是「本字幕由TME AI技术生成」），\n喜马拉雅的内容没有。\n\n### 实测（国内机器）\n- 导入聆澜音源 → 搜《大奉打更人》→ 2653 集目录 → 第 1 集 280 行文稿 → 解析出 CDN 地址\n- 三家文稿命中：酷我 3/8、QQ 175 行、酷狗 280 行\n\n### 已知限制\n- LX 脚本只支持 `kw`/`tx`/`kg` 三个平台的目录；`wy`/`mg`/`qs` 可以解析但搜不到书\n- QQ 接口偶发返回空（实测 3 次里 1 次正常），酷我/酷狗稳定\n- 文稿只对有 AI 字幕的书有效",
+  "sha256": "6a45fc0c98b79cd311d451828fb4220d5057e7483b680b4bcf8cf11550e8a3a4",
+  "size": 31025943,
+  "publishedAt": "2026-11-20T04:39:16Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.27.4/tingshu-1.27.4-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.28.0/tingshu-1.28.0-arm64.apk"
   ]
 }
