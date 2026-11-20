@@ -1,12 +1,12 @@
 {
-  "versionName": "1.29.0",
-  "versionCode": 12900,
+  "versionName": "1.29.1",
+  "versionCode": 12901,
   "force": false,
-  "changelog": "### 播放页内嵌文稿 + 全屏文稿页\n参照 Melora 的做法（内嵌和全屏**共用同一份数据与「当前行」计算**，只是显示范围不同）：\n\n- **播放页内嵌区**：封面下方显示当前句附近 5 行，当前句加粗居中；\n  没有文稿时整块隐藏，不占位。\n- **点内嵌区 → 全屏文稿页**：整篇可滚动，当前句高亮跟随，\n  手动滚动暂停 3 秒再恢复，点某句跳到对应时间。\n- 之前是「半屏抽屉」，不符合听书场景，已改掉。\n\n### 新增：跨源「借文稿」（P7）\n当前音源没有字幕时（比如喜马的内容），文稿面板会出现 **「找同名版本的文稿」** 按钮：\n\n```\n点它 → 用书名在已启用的 LX 源里搜同名书\n     → 候选按「集数接近」排序\n     → 选中后按集号定位到那本书的对应章\n     → 取那边的 AI 字幕挂到当前播放\n```\n\n判断「是不是同一本书」用三个信号：书名归一化后相同、集数接近、章节名能对上。\n书名归一化会切掉 `|`、`｜`、`丨` 三种竖线后的副标题，并去掉书名号/括号/标点。\n\n集号识别支持：`第1224集`、`第001集`、`第十二集`（中文数字）、`第一章`、`001 xxx`。\n\n### 修复：封面全白\n日志里大量：\n\n```\nURL: https://img3.sycdn.kuwo.cn/star/albumcover/240/...jpg\n错误: CERTIFICATE_VERIFY_FAILED: Hostname mismatch\n```\n\n原因是我上一版把**所有**封面域名无差别升级到 https，而酷我的图片 CDN\n`*.sycdn.kuwo.cn` 证书是别的域名的，https 直接握手失败。\n\n现在改成**白名单升级**：\n\n| 域名 | 处理 |\n|---|---|\n| `*.sycdn.kuwo.cn` | **强制 http**（证书不匹配）|\n| `126.net` / `gtimg.cn` / `kugou.com` / `xmcdn.com` | 升级 https |\n| 其它未知域名 | 保持原样 |\n\n### 改进：LX 解析失败时用内置解析兜底\n你的日志里聆澜服务的 `music/url` **43 次里 41 次返回 500**：\n\n```\n脚本解析失败: local responded with status 500 or no URL\n脚本解析失败: guo responded with status 500 or no URL\n```\n\n`local`/`guo` 是它后端节点名，**不是我们的问题**。但用户不该因此听不了，所以：\n\n```\nLX 脚本解析失败 → 自动回退到内置解析（酷我 mobi.s → p2p 重建 → higequ）\n```\n\n回退时会记一条日志，方便判断是脚本的问题还是内置的问题。",
-  "sha256": "c4ded4c44e385638e1962779d9c7987d7e8a70800493d9d47d48ee9994863f6f",
+  "changelog": "### 视觉：吸收 Melora 的两个主题细节\n研究了下 Melora（Jetpack Compose）的配色，它用的是 **Material 3 基础色 + 一套自定义语义调色板**：\n\n```kotlin\nMeloraBlue     #3567E8   // 品牌蓝，注释写「取自 Web 端 --blue，保证跨端一致」\ncanvas         #F4F5F7 / #000000\ncard           #FFFFFF / #191C23\nbrand          #2563EB / #6E9BFF\n// 现代化极简卡片微描边：替代发脏的不对称单向阴影，四边完全均匀细腻\ncardBorder     #0D000000 / #282F3B  (0.6dp)\n```\n\n橘听本来就是**动态取色**（从封面提取多色生成 ColorScheme），配色能力比它更强，所以只吸收了两个细节：\n\n**① 卡片加 0.6dp 极淡描边**\n\n阴影在深色下会发脏、且四边不均；描边四边均匀，卡片边界更清晰。\n浅色用 5% 黑、深色用 `#282F3B`。\n\n**② 深色画布压到接近纯黑**\n\n`fromSeed` 生成的 `surface` 是中灰，整屏发灰、OLED 也不省电。\n现在深色下 `surface = #0B0B0F`、`surfaceContainerLowest = #070709`，\n卡片（`surfaceContainerLow`）自然比画布亮一档，层次更清楚。",
+  "sha256": "b5ae4810fcfb71a024e734367ade88857b60c6314cf2cf2135f154df0e7997ad",
   "size": 31027883,
-  "publishedAt": "2026-11-20T05:35:26Z",
+  "publishedAt": "2026-11-20T05:45:44Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.29.0/tingshu-1.29.0-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.29.1/tingshu-1.29.1-arm64.apk"
   ]
 }
