@@ -1,12 +1,12 @@
 {
-  "versionName": "1.38.1",
-  "versionCode": 13801,
+  "versionName": "1.38.2",
+  "versionCode": 13802,
   "force": false,
-  "changelog": "### 修复：B 站源（JS 音源）拿不到文稿\n内置 B 站有字幕了，但 `eprendre-bilibili` 这类 **JS 音源**没有 ——\n因为字幕能力只加在 `BuiltinSource` 契约上，JS 源走的是另一条链路。\n\n**为什么不直接在 JS 里实现**：B 站字幕要 **WBI 签名**（mixin key 重排 + md5）\n和**登录 Cookie**，在 JS 沙箱里重做一遍很容易和 Dart 侧的实现漂移。\n\n**改法：桥接**\n\n```\nJS 侧  uni.biliSubtitle(bvid, cid)      ← 新 API\n         ↓ sendMessage('biliSubtitle')\nDart 侧 BiliApi.subtitleLrcByBvidCid()  ← 复用内置实现（签名 + Cookie 都在这）\n         ↓ __biliSubResolve(id, lrc)\nJS 侧  Promise resolve(LRC 文本)\n```\n\n**三处改动**：\n\n1. `uni_shim.js` —— 新增 `uni.biliSubtitle()`，按 `__httpCbs` 同一套 Promise 模式回调\n2. `js_engine.dart` —— 注册 `biliSubtitle` 消息处理器\n3. `eprendre-bilibili.js` —— 新增 `getLyrics()`，用 `_chapterInfo()` 拿到 `bvid`/`cid` 后桥接\n\n**好处**：任何 JS 音源只要写一行 `await uni.biliSubtitle(bvid, cid)` 就能有文稿，\n不用各自实现签名和登录。",
-  "sha256": "0ff381a11c3797baed6ea2a948068a2b368c9d772754ad6f405933c843c95c46",
+  "changelog": "### 修复：已导入的 B 站源取不到文稿（不用更新源了）\n**你问得对，但不用更新源订阅** —— 我改成自动兜底了。\n\n**根因**：你导入 `eprendre-bilibili` 时，它的**代码快照存在本地数据库**里。\n我后给 assets 里的 JS 加了 `getLyrics`，但**已导入的源用的是旧快照**，\n所以调不到那个方法。\n\n日志里能对上：`eprendre-bilibili` 能正常搜索/播放/嗅探，\n但**全程没有任何 `[Bili]` 或 `[LyricsMatch]` 记录** —— 说明字幕那条路压根没进。\n\n**改法：在 `SourceManager` 层做兜底，不依赖源是否实现 `getLyrics`**\n\n```\n调 JsEngine.call(sourceId, 'getLyrics')\n  ├─ 返回了非空 LRC  → 直接用\n  ├─ 抛「音源无方法」 → 兜底\n  └─ 返回空字符串     → 兜底\n\n兜底：从 chapterId 抠 bvid + cid\n      regex: \"bvid\":\"BV...\"  /  \"cid\":123\n      → BiliApi.subtitleLrcByBvidCid(bvid, cid)\n```\n\n**为什么能抠出来**：`eprendre-bilibili` 的 `chapterId` 是 JSON\n（缓存路径里能看到 `{\"bvid\":\"BV1nZ421Y7tw\",\"cid\":...}`），\nB 站源基本都用这个形态，直接复用。\n\n**效果**：**任何 B 站系 JS 源，不管导入时有没有 `getLyrics`，现在都能出文稿。**\n你不需要重新导入，也不需要更新订阅。",
+  "sha256": "b9c7f910d2b2c30bcf8893d4298ff42dbbe4c38495ac0ee78be1e3530951f07c",
   "size": 31100575,
-  "publishedAt": "2026-11-20T15:36:55Z",
+  "publishedAt": "2026-11-20T15:54:39Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.38.1/tingshu-1.38.1-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.38.2/tingshu-1.38.2-arm64.apk"
   ]
 }
