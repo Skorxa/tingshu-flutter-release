@@ -1,12 +1,12 @@
 {
-  "versionName": "1.34.0",
-  "versionCode": 13400,
+  "versionName": "1.33.2",
+  "versionCode": 13302,
   "force": false,
-  "changelog": "### 新增：Liquid Glass 全局 UI 风格\n\n设置 → 外观 → **UI 风格**，可在 `Material 3` / `Liquid Glass` 之间切换，**立即生效**。\n\n用的是项目里已有的 `liquid_glass_widgets`（底部导航的「液态玻璃」样式一直在用），\n这次把它从「导航专用」扩到全局。\n\n**P1 状态层**\n\n```dart\nuiStyle        'material' | 'liquid'\nliquidUiEnabled  kill switch（默认 true）\nliquidUi       = liquidUiEnabled && uiStyle == 'liquid'\neffectiveNavStyle = liquidUi ? 'liquid' : 用户原来的选择\n```\n\n- `SettingsService` 是 `ChangeNotifier`，`main.dart` 已用 `AnimatedBuilder` 监听\n  → **切换立即生效，不用重启**\n- 切到 Liquid 时**备份**用户原来的导航样式，切回 Material 自动还原\n- **kill switch**：关掉后 `liquidUi` 恒 false，设置项保留，不用发版即可回退\n\n**P2 全局背景**\n\n玻璃必须有东西可透 —— 纯色背景上 `BackdropFilter` 完全看不出效果。\n\n- 新增 `AppBackdrop`：底色 + 两团大半径径向渐变（主题色 10%/7%）\n- 放在 **`MaterialApp.builder`**（不是 `HomeShell`）—— 因为只有 4 个 tab 在里面，\n  push 出来的页面（搜索详情、设置子页）盖不到\n- 玻璃模式 `scaffoldBackgroundColor: Colors.transparent`，让所有 Scaffold 透出背景\n- Material 模式完全不引入，外观零变化\n\n**P3 卡片玻璃化（先做设置页）**\n\n- 新增 `AppCard` 薄包装：Material 模式是 `Card`，玻璃模式是 `GlassContainer.card`\n- 设置页的 `SettingsSection` 分组容器已接入\n- 用 `LiquidRoundedSuperellipse`（超椭圆/连续曲率），普通圆角在玻璃上转角会生硬\n\n**性能取舍（重要）**\n\n| 规则 | 原因 |\n|---|---|\n| **列表行不用玻璃** | 每项一个 BackdropFilter 会掉帧 |\n| 只在页面级容器用 | 设置分组、弹层、导航 |\n| 不嵌套 AppCard | 嵌套玻璃指数级掉帧 |\n| 不传自定义 settings | 会覆盖 `AdaptiveGlass` 的深浅色自适应 |\n\n**验收指标**：滚动发现页 20+ 卡片，DevTools 帧率 60fps，jank 帧（>16ms）< 5%。\n\n### 顺带\n- 新增 `GlassColors`（ThemeExtension）：一套人肉调过的中性灰阶，\n  正文/次级文字不再随封面主题色漂移（为下一步修对比度铺路）",
-  "sha256": "7478a4cfbd9120c57c299c10cbae8f10bd8ecd67d1f3fd8da953e08e57a8b1dc",
-  "size": 31229619,
-  "publishedAt": "2026-11-20T12:02:33Z",
+  "changelog": "### 真正的根因：`getChaptersFromSource` 漏了聚合分流\n1.33.1 我以为修好了，但日志显示：\n\n```\n[19:13:14] 音源搜索完成  音源: 洛雪聚合听书  新增结果: 36    ← 搜索成功\n[19:13:16] 已切换音源 洛雪聚合听书\n[19:13:17] 目录第 1 页加载失败  Exception: 音源未开启        ← 目录失败\n```\n\n**搜索成功、目录失败** —— 说明只有搜索那条路接了聚合分流。\n\n查下来：四个入口里**只有 `getChaptersFromSource` 没接**：\n\n| 方法 | 分流 |\n|---|---|\n| `searchFromSource` | ✅ |\n| **`getChaptersFromSource`** | ❌ **漏了** |\n| `getAudioUrlFromSource` | ✅ |\n| `getLyricsFromSource` | ✅ |\n\n我上一版的批量替换用了一段「假设存在」的文本做锚点，没匹配上却静默跳过了。\n这次用 grep 逐个确认了行号（97/168/225/270 各一处），四个入口都有。\n\n### 同时做的防御\n- `lxMembers()` 排除聚合源自身（`_kindOf('lx_pool')` 也返回 'lx'，\n  不排除会让聚合源把自己当成员 → 递归）\n- `_runOnPool` 里再过滤一次，兜底\n- 全失败时记一条日志，列出失败的脚本 id\n\n### 播放页：修「文稿被进度条压住」\n你截图里最后一行「冬冥部的本家族人围聚在碉楼或是城墙之上，」**被进度条压住了**。\n\n根因是布局用了**固定高度**：\n\n```dart\n封面  → Expanded（吃满剩余）\n文稿  → SizedBox(height: 128)   ← 固定\n进度条/控制 → 固定\n```\n\n屏幕不够高时，`Expanded` 会抢空间，固定高度的文稿就被挤出去、压到进度条上。\n\n**改成按比例分配**：\n\n```dart\n封面  → Expanded(flex: 5)\n文稿  → Expanded(flex: 3) + ClipRect\n进度/控制 → 固定\n```\n\n两者一起收缩，**永远不会重叠**。\n\n**另外文稿行数改成动态**：用 `LayoutBuilder` 按实际可用高度算能放几行\n（`可用高度 / 行高`），小屏自动少显示几行，不再硬挤。\n\n### 播放页：封面按可用空间计算（学 Melora 的减法）\nMelora 的封面尺寸是**算出来的**，不是固定值：\n\n```kotlin\n// 先给文稿留位，剩下的才给封面\nval squareSide = minOf(maxWidth, maxHeight - lyricsHeight, 480.dp)\n```\n\n橘听之前是 `(side * 0.72).clamp(180, 300)` —— 在 `Expanded` 里用固定值，\n小屏时封面会把文稿挤出去（就是被进度条压住的原因）。\n\n**现在**：封面边长 = `实际可用短边 * 0.94`（clamp 120~320），\n永远不超过父级给的区域。\n\n### 参考：Haze 的玻璃效果\n你给的 [chrisbanes/haze](https://github.com/chrisbanes/haze) 是 Compose 的毛玻璃库，\n核心是「标记背景源 → 模糊那个源」：\n\n```kotlin\nImage(painter, Modifier.hazeSource(state))\nBox(Modifier.hazeBlur(input = HazeInput.Sources(state), style = ...))\n```\n\nFlutter 的等价物是 `BackdropFilter`。橘听当前用的是 `ImageFiltered` 模糊封面图本身 ——\n对「整页背景」效果一样，而且更省（封面是静态图，不用每帧采样）。\n\nHaze 的 **Glass（折射 + 高光）** 需要自定义 shader，Flutter 侧没有对等实现，\n这一档暂时做不到。",
+  "sha256": "119e605f3aae39fd63643b33d17977d7b659ce5d496689ac80088600827ee41c",
+  "size": 31098591,
+  "publishedAt": "2026-11-20T12:23:55Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.34.0/tingshu-1.34.0-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.33.2/tingshu-1.33.2-arm64.apk"
   ]
 }
