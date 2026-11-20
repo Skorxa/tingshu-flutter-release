@@ -1,12 +1,12 @@
 {
-  "versionName": "1.29.4",
-  "versionCode": 12904,
+  "versionName": "1.29.5",
+  "versionCode": 12905,
   "force": false,
-  "changelog": "### 修复：搜不到 QQ 的书\n1.29.2 我把 QQ 搜索换成了 Q-music 的 **Mobile** 接口，但忘了关键一点：\n**Q-music 在 Mobile 下用的是 `search_type: 0`（单曲）**，而我传的是 `2`（专辑）。\nMobile 不认这个值 → 直接返回空。所以搜索结果里只有酷我、酷狗。\n\n**修复**：Desktop 优先（`search_type: 2` 只有它认），Mobile 兜底。\n\n```\nDesktop 试 2 次 → 还是空 → Mobile 试 2 次\n```\n\n### 新增：源里的 `console.*` 转发到运行日志\n之前源内的 `console.log` 只打到 native log，App 的运行时日志里**完全看不到**，\n排查「为什么搜索没结果」只能靠猜。\n\n现在 shim 覆盖了 console，按通道转给 Dart：\n\n```\n[SourceJs] 源内输出： [tx] 搜「大奉打更人」 接口=Desktop:0,Mobile:0 原始=0 听书=0\n```\n\n`console.error` 走 warning 级别，`console.debug` 不落库避免刷屏。\n\n### 搜索诊断\nQQ 搜索会打一条汇总日志，包含：用了哪个接口、每个接口返回几条、原始多少条、\n过滤后多少条。如果返回了但被筛掉，还会打前两条的 `song_count` 和标题样本。\n\n这样下次「搜不到」就能直接判断是：接口空、字段名不对、还是筛选条件太严。",
-  "sha256": "2521536bf48b72566d8088c647f5d19b2b901c9293612464b96eed3a12465c19",
-  "size": 31030099,
-  "publishedAt": "2026-11-20T06:53:11Z",
+  "changelog": "### 修复：QQ 搜索返回 0 条（真正的原因）\n日志里的诊断（1.29.4 加的转发生效了）：\n\n```\n[tx] 搜「剑来」 接口=Desktop:0,Desktop:0,Mobile:0,Mobile:0 原始=0 听书=0\n[tx] 搜「道士不好惹」 接口=Desktop:0,Desktop:0,Mobile:0,Mobile:0 原始=0 听书=0\n```\n\n我这边也是同样结果，所以**不是限流**，是请求本身不合法。\n\n研究了 Q-music 的 `signQQRequest`，QQ 搜索现在**必须带 zzc 签名**：\n\n```\nPOST https://u.y.qq.com/cgi-bin/musics.fcg?sign=<zzc...>\nUA: QQMusic 14090508(android 12)\nbody: { comm: <完整设备指纹>, req: {...} }\n```\n\n签名算法（15 行）：\n\n```js\nhash  = sha1(body)                       // 40 位 hex\npart1 = 按 [23,14,6,36,16,7,19] 取字符    // 7 字符\npart2 = 按 [16,1,32,12,19,27,8,5] 取字符  // 8 字符\npart3 = base64(scramble[i] ^ hash[i*2:i*2+2])   // 20 字节\nsign  = 'zzc' + part1 + part3 + part2          // 转小写\n```\n\n`comm` 也不能只用 `{ct,cv}`，要带完整设备指纹（`phonetype`/`rom`/`os_ver`/\n`QIMEI36`/`nettype` 等 20 多个字段）。\n\n**这版做了**：\n\n1. `lx_shim.js` 新增**纯 JS 的 sha1**（QuickJS 没有 crypto），\n   已用 Node 的 `createHash('sha1')` 对 5 组输入校验，**全部一致**\n2. `book_adapters.js` 新增 `zzcSign` + `txComm()`（完整设备指纹）+ 签名请求\n3. 签名算法与 Q-music 的实现对比，4 组输入**全部一致**\n4. **双路径兜底**：签名请求失败时，回退到旧的 `musicu.fcg` 无签名请求\n\n### 诊断日志更新\n签名路径失败会打 `signed:0` / `unsigned:0`，能直接看出是哪条路不通。",
+  "sha256": "39bb3c0b1e7353ee66dde5cebc6c533d38def5aae71a45501ba505dfe26f74dd",
+  "size": 31031671,
+  "publishedAt": "2026-11-20T07:09:51Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.29.4/tingshu-1.29.4-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.29.5/tingshu-1.29.5-arm64.apk"
   ]
 }
