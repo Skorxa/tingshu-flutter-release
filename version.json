@@ -1,12 +1,12 @@
 {
-  "versionName": "1.29.5",
-  "versionCode": 12905,
+  "versionName": "1.30.0",
+  "versionCode": 13000,
   "force": false,
-  "changelog": "### 修复：QQ 搜索返回 0 条（真正的原因）\n日志里的诊断（1.29.4 加的转发生效了）：\n\n```\n[tx] 搜「剑来」 接口=Desktop:0,Desktop:0,Mobile:0,Mobile:0 原始=0 听书=0\n[tx] 搜「道士不好惹」 接口=Desktop:0,Desktop:0,Mobile:0,Mobile:0 原始=0 听书=0\n```\n\n我这边也是同样结果，所以**不是限流**，是请求本身不合法。\n\n研究了 Q-music 的 `signQQRequest`，QQ 搜索现在**必须带 zzc 签名**：\n\n```\nPOST https://u.y.qq.com/cgi-bin/musics.fcg?sign=<zzc...>\nUA: QQMusic 14090508(android 12)\nbody: { comm: <完整设备指纹>, req: {...} }\n```\n\n签名算法（15 行）：\n\n```js\nhash  = sha1(body)                       // 40 位 hex\npart1 = 按 [23,14,6,36,16,7,19] 取字符    // 7 字符\npart2 = 按 [16,1,32,12,19,27,8,5] 取字符  // 8 字符\npart3 = base64(scramble[i] ^ hash[i*2:i*2+2])   // 20 字节\nsign  = 'zzc' + part1 + part3 + part2          // 转小写\n```\n\n`comm` 也不能只用 `{ct,cv}`，要带完整设备指纹（`phonetype`/`rom`/`os_ver`/\n`QIMEI36`/`nettype` 等 20 多个字段）。\n\n**这版做了**：\n\n1. `lx_shim.js` 新增**纯 JS 的 sha1**（QuickJS 没有 crypto），\n   已用 Node 的 `createHash('sha1')` 对 5 组输入校验，**全部一致**\n2. `book_adapters.js` 新增 `zzcSign` + `txComm()`（完整设备指纹）+ 签名请求\n3. 签名算法与 Q-music 的实现对比，4 组输入**全部一致**\n4. **双路径兜底**：签名请求失败时，回退到旧的 `musicu.fcg` 无签名请求\n\n### 诊断日志更新\n签名路径失败会打 `signed:0` / `unsigned:0`，能直接看出是哪条路不通。",
-  "sha256": "39bb3c0b1e7353ee66dde5cebc6c533d38def5aae71a45501ba505dfe26f74dd",
-  "size": 31031671,
-  "publishedAt": "2026-11-20T07:09:51Z",
+  "changelog": "### 文稿 UI 打磨（参照 Melora 的沉浸歌词做法）\n\n**① 距离衰减**\n\n以前只有「当前句 / 其它」两档。现在按**离当前句多远**连续衰减：\n\n| 距离 | 全屏字号 | 全屏透明度 |\n|---|---|---|\n| 0（当前）| 17.0 | 1.00 |\n| 1 | 16.4 | 0.84 |\n| 2 | 15.8 | 0.68 |\n| 3 | 15.2 | 0.52 |\n| 5+ | 14.0 | 0.28 |\n\n内嵌区同理（16.0 → 12.5）。层次是连续的，不会出现\"一刀切\"的突兀感。\n\n**② 视口边缘渐隐**\n\n用 `ShaderMask` + 竖向渐变（`stops: [0, 0.16, 0.84, 1]`）：\n滚到视口边上的句子自然淡出，而不是被硬边切断。\n\n**③ 当前句居中**\n\n滚动目标从「靠近顶部」改成**停在视口中线**：\n\n```dart\ntarget = index * itemExtent - viewport / 2 + itemExtent / 2\n```\n\n**④ 全屏页沉浸化**\n\n- AppBar 透明、与背景同色\n- 正文区竖向渐变（`surface → surfaceContainerLow`）\n- 新增「回到当前句」按钮（`my_location`）——手动滚远了可以一键回来\n\n**⑤ 过渡更顺**\n\n字号/颜色过渡 180–240ms + `Curves.easeOut`，切换当前句时不会跳变。",
+  "sha256": "d30e63d0e154e3cdd56b0b331c275d7440d112732e76f14f8a4ead355f356673",
+  "size": 31032271,
+  "publishedAt": "2026-11-20T08:47:19Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.29.5/tingshu-1.29.5-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.30.0/tingshu-1.30.0-arm64.apk"
   ]
 }
