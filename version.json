@@ -1,12 +1,12 @@
 {
-  "versionName": "1.38.0",
-  "versionCode": 13800,
+  "versionName": "1.38.1",
+  "versionCode": 13801,
   "force": false,
-  "changelog": "### 新增：B 站字幕接入\n内置 B 站听书现在有文稿了，走 B 站**官方字幕轨**（不是语音转写）。\n\n**接口链路**（参考 PiliPlus 的实现，同为 Flutter）：\n\n```\nGET /x/player/wbi/v2?aid=&bvid=&cid=   ← 需 WBI 签名\n  → data.subtitle.subtitles[]          ← lan / lan_doc / type / subtitle_url\n  → subtitle_url 指向 JSON: {body:[{from, to, content}]}\n  → 转 LRC: [mm:ss.xx]content\n```\n\n**实现细节**：\n\n- 新增 `BiliApi.subtitles()` / `subtitleLrc()`\n- 字幕轨排序：**中文优先 → 非 AI 优先**（AI 字幕断句更碎，但有时是唯一可用的）\n- `BuiltinSource` 契约加可选 `getLyrics()`；B 站实现，喜马返回空串（走「借文稿」）\n- 接入后**内嵌文稿区、全屏文稿页、时间偏移**全部可用\n\n### 新增：第三方 B 站音源复用内置登录态\n`eprendre-bilibili` 这类 JS 音源自己做请求，拿不到橘听的登录 Cookie。\n\n现在橘听会在两个时机把 Cookie 递给 JS：\n\n| 时机 | 位置 |\n|---|---|\n| App 启动（JS 引擎就绪后） | `main.dart` |\n| B 站登录/刷新账号后 | `BiliAccountService.refreshFromNav` |\n\nJS 侧通过 `uni.getStorageSync('bili_cookie')` 读取（也给了 `bili_sessdata`），\n`eprendre-bilibili.js` 已改成自动带上 Cookie —— **用户不用在音源里再登录一次**。\n\n### 两个限制（必须知道）\n\n1. **需要登录**。未登录时 B 站对 `subtitles` 恒返回空，这是官方行为。\n2. **不是所有视频都有字幕**。UP 主上传的字幕、或 B 站已生成的 AI 字幕才有；\n   普通有声书视频很可能没有。没有时日志会记一条「该分P 没有字幕」。",
-  "sha256": "c3887c5a54445c7789c3bebea14c239f00419e7fabf474d6e1081b10b59ca540",
-  "size": 31100255,
-  "publishedAt": "2026-11-20T15:18:39Z",
+  "changelog": "### 修复：B 站源（JS 音源）拿不到文稿\n内置 B 站有字幕了，但 `eprendre-bilibili` 这类 **JS 音源**没有 ——\n因为字幕能力只加在 `BuiltinSource` 契约上，JS 源走的是另一条链路。\n\n**为什么不直接在 JS 里实现**：B 站字幕要 **WBI 签名**（mixin key 重排 + md5）\n和**登录 Cookie**，在 JS 沙箱里重做一遍很容易和 Dart 侧的实现漂移。\n\n**改法：桥接**\n\n```\nJS 侧  uni.biliSubtitle(bvid, cid)      ← 新 API\n         ↓ sendMessage('biliSubtitle')\nDart 侧 BiliApi.subtitleLrcByBvidCid()  ← 复用内置实现（签名 + Cookie 都在这）\n         ↓ __biliSubResolve(id, lrc)\nJS 侧  Promise resolve(LRC 文本)\n```\n\n**三处改动**：\n\n1. `uni_shim.js` —— 新增 `uni.biliSubtitle()`，按 `__httpCbs` 同一套 Promise 模式回调\n2. `js_engine.dart` —— 注册 `biliSubtitle` 消息处理器\n3. `eprendre-bilibili.js` —— 新增 `getLyrics()`，用 `_chapterInfo()` 拿到 `bvid`/`cid` 后桥接\n\n**好处**：任何 JS 音源只要写一行 `await uni.biliSubtitle(bvid, cid)` 就能有文稿，\n不用各自实现签名和登录。",
+  "sha256": "0ff381a11c3797baed6ea2a948068a2b368c9d772754ad6f405933c843c95c46",
+  "size": 31100575,
+  "publishedAt": "2026-11-20T15:36:55Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.38.0/tingshu-1.38.0-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.38.1/tingshu-1.38.1-arm64.apk"
   ]
 }
