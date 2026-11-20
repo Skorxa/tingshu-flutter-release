@@ -1,12 +1,12 @@
 {
-  "versionName": "1.28.2",
-  "versionCode": 12802,
+  "versionName": "1.29.0",
+  "versionCode": 12900,
   "force": false,
-  "changelog": "### 紧急修复：1.28.1 导致**所有**橘听自有音源失效\n症状：搜索时每个源都报\n\n```\n音源解析失败: Error: 脚本未按 LX 协议完成初始化(没有 send(inited))\n```\n\n**根因**（我 1.28.1 引入的）：\n为了把「LX 脚本」和「橘听自有格式」分开，我用「是否以 `({` 开头」判断对象字面量。\n但橘听的源文件**都带注释头**：\n\n```js\n// 聚合听书（四平台聚合：酷我 kw / 网易 wy / QQ tx / 酷狗 kg）\n({\n  id: 'tingshu-json-juhe',\n```\n\n前面有 `//` 注释，`^\\(\\s*\\{` 就匹配不到 → 全部误判成 LX 脚本 → 全部失败。\n\n**修复**：不再靠「开头长什么样」猜，改成**先判 LX 特征、再按原生解析、失败才兜底试 LX**：\n\n```js\nif (__isLxScript(code)) return __loadLxSource(code);   // 特征明确的 LX\ntry {\n  return __loadNativeSource(code);                     // 绝大多数源走这里\n} catch (nativeError) {\n  try { return __loadLxSource(code); }                 // 写法特殊的 LX 兜底\n  catch (_) { throw nativeError; }\n}\n```\n\n这样无论源文件前面有多少注释、注释里写了什么，都不会影响判断。\n\n### 改进：LX 源现在能在「音源管理」里看到并选中\n之前 LX 源只在独立的「LX 音源」页面出现，**没法把它选成当前音源、也没法单源搜索**。\n现在：\n\n- **音源管理**列表里会显示 LX 源，名字后面带 `LX` 标签，\n  副标题写清能力：`可搜索 kw/tx/kg`、`仅解析 mg/qs/wy`\n- 点它就能设为当前音源（和其他源一样）\n- 音源切换、聚合搜索、发现页音源选择里同样可选\n- 导入/删除仍在独立的「LX 音源」页面（那边有粘贴/链接/文件三种方式）\n\n### 验证\n- **全部 56 个内置源**：成功 56，失败 0\n- LX 脚本（聆澜）：正常识别，平台 `kg,kw,tx`\n- `flutter test`：541 项全绿",
-  "sha256": "acd1c3133cbb8f2a460598aea06375837c313a2c62b16ef1fdaeef31436eb3eb",
-  "size": 31026555,
-  "publishedAt": "2026-11-20T05:13:06Z",
+  "changelog": "### 播放页内嵌文稿 + 全屏文稿页\n参照 Melora 的做法（内嵌和全屏**共用同一份数据与「当前行」计算**，只是显示范围不同）：\n\n- **播放页内嵌区**：封面下方显示当前句附近 5 行，当前句加粗居中；\n  没有文稿时整块隐藏，不占位。\n- **点内嵌区 → 全屏文稿页**：整篇可滚动，当前句高亮跟随，\n  手动滚动暂停 3 秒再恢复，点某句跳到对应时间。\n- 之前是「半屏抽屉」，不符合听书场景，已改掉。\n\n### 新增：跨源「借文稿」（P7）\n当前音源没有字幕时（比如喜马的内容），文稿面板会出现 **「找同名版本的文稿」** 按钮：\n\n```\n点它 → 用书名在已启用的 LX 源里搜同名书\n     → 候选按「集数接近」排序\n     → 选中后按集号定位到那本书的对应章\n     → 取那边的 AI 字幕挂到当前播放\n```\n\n判断「是不是同一本书」用三个信号：书名归一化后相同、集数接近、章节名能对上。\n书名归一化会切掉 `|`、`｜`、`丨` 三种竖线后的副标题，并去掉书名号/括号/标点。\n\n集号识别支持：`第1224集`、`第001集`、`第十二集`（中文数字）、`第一章`、`001 xxx`。\n\n### 修复：封面全白\n日志里大量：\n\n```\nURL: https://img3.sycdn.kuwo.cn/star/albumcover/240/...jpg\n错误: CERTIFICATE_VERIFY_FAILED: Hostname mismatch\n```\n\n原因是我上一版把**所有**封面域名无差别升级到 https，而酷我的图片 CDN\n`*.sycdn.kuwo.cn` 证书是别的域名的，https 直接握手失败。\n\n现在改成**白名单升级**：\n\n| 域名 | 处理 |\n|---|---|\n| `*.sycdn.kuwo.cn` | **强制 http**（证书不匹配）|\n| `126.net` / `gtimg.cn` / `kugou.com` / `xmcdn.com` | 升级 https |\n| 其它未知域名 | 保持原样 |\n\n### 改进：LX 解析失败时用内置解析兜底\n你的日志里聆澜服务的 `music/url` **43 次里 41 次返回 500**：\n\n```\n脚本解析失败: local responded with status 500 or no URL\n脚本解析失败: guo responded with status 500 or no URL\n```\n\n`local`/`guo` 是它后端节点名，**不是我们的问题**。但用户不该因此听不了，所以：\n\n```\nLX 脚本解析失败 → 自动回退到内置解析（酷我 mobi.s → p2p 重建 → higequ）\n```\n\n回退时会记一条日志，方便判断是脚本的问题还是内置的问题。",
+  "sha256": "c4ded4c44e385638e1962779d9c7987d7e8a70800493d9d47d48ee9994863f6f",
+  "size": 31027883,
+  "publishedAt": "2026-11-20T05:35:26Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.28.2/tingshu-1.28.2-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.29.0/tingshu-1.29.0-arm64.apk"
   ]
 }
