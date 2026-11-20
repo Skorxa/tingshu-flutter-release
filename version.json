@@ -1,12 +1,12 @@
 {
-  "versionName": "1.33.2",
-  "versionCode": 13302,
+  "versionName": "1.35.0",
+  "versionCode": 13500,
   "force": false,
-  "changelog": "### 真正的根因：`getChaptersFromSource` 漏了聚合分流\n1.33.1 我以为修好了，但日志显示：\n\n```\n[19:13:14] 音源搜索完成  音源: 洛雪聚合听书  新增结果: 36    ← 搜索成功\n[19:13:16] 已切换音源 洛雪聚合听书\n[19:13:17] 目录第 1 页加载失败  Exception: 音源未开启        ← 目录失败\n```\n\n**搜索成功、目录失败** —— 说明只有搜索那条路接了聚合分流。\n\n查下来：四个入口里**只有 `getChaptersFromSource` 没接**：\n\n| 方法 | 分流 |\n|---|---|\n| `searchFromSource` | ✅ |\n| **`getChaptersFromSource`** | ❌ **漏了** |\n| `getAudioUrlFromSource` | ✅ |\n| `getLyricsFromSource` | ✅ |\n\n我上一版的批量替换用了一段「假设存在」的文本做锚点，没匹配上却静默跳过了。\n这次用 grep 逐个确认了行号（97/168/225/270 各一处），四个入口都有。\n\n### 同时做的防御\n- `lxMembers()` 排除聚合源自身（`_kindOf('lx_pool')` 也返回 'lx'，\n  不排除会让聚合源把自己当成员 → 递归）\n- `_runOnPool` 里再过滤一次，兜底\n- 全失败时记一条日志，列出失败的脚本 id\n\n### 播放页：修「文稿被进度条压住」\n你截图里最后一行「冬冥部的本家族人围聚在碉楼或是城墙之上，」**被进度条压住了**。\n\n根因是布局用了**固定高度**：\n\n```dart\n封面  → Expanded（吃满剩余）\n文稿  → SizedBox(height: 128)   ← 固定\n进度条/控制 → 固定\n```\n\n屏幕不够高时，`Expanded` 会抢空间，固定高度的文稿就被挤出去、压到进度条上。\n\n**改成按比例分配**：\n\n```dart\n封面  → Expanded(flex: 5)\n文稿  → Expanded(flex: 3) + ClipRect\n进度/控制 → 固定\n```\n\n两者一起收缩，**永远不会重叠**。\n\n**另外文稿行数改成动态**：用 `LayoutBuilder` 按实际可用高度算能放几行\n（`可用高度 / 行高`），小屏自动少显示几行，不再硬挤。\n\n### 播放页：封面按可用空间计算（学 Melora 的减法）\nMelora 的封面尺寸是**算出来的**，不是固定值：\n\n```kotlin\n// 先给文稿留位，剩下的才给封面\nval squareSide = minOf(maxWidth, maxHeight - lyricsHeight, 480.dp)\n```\n\n橘听之前是 `(side * 0.72).clamp(180, 300)` —— 在 `Expanded` 里用固定值，\n小屏时封面会把文稿挤出去（就是被进度条压住的原因）。\n\n**现在**：封面边长 = `实际可用短边 * 0.94`（clamp 120~320），\n永远不超过父级给的区域。\n\n### 参考：Haze 的玻璃效果\n你给的 [chrisbanes/haze](https://github.com/chrisbanes/haze) 是 Compose 的毛玻璃库，\n核心是「标记背景源 → 模糊那个源」：\n\n```kotlin\nImage(painter, Modifier.hazeSource(state))\nBox(Modifier.hazeBlur(input = HazeInput.Sources(state), style = ...))\n```\n\nFlutter 的等价物是 `BackdropFilter`。橘听当前用的是 `ImageFiltered` 模糊封面图本身 ——\n对「整页背景」效果一样，而且更省（封面是静态图，不用每帧采样）。\n\nHaze 的 **Glass（折射 + 高光）** 需要自定义 shader，Flutter 侧没有对等实现，\n这一档暂时做不到。",
-  "sha256": "119e605f3aae39fd63643b33d17977d7b659ce5d496689ac80088600827ee41c",
+  "changelog": "### 说明：1.34.0 那个 release 是废包\n回滚时 `git revert` 把 `pubspec.yaml` 的版本号也退回了 1.33.2，\n导致 CI 用旧版本号发了一次 release。这版号已修正为 1.35.0。\n\n### 回滚：删除 Liquid Glass 主题\n1.34.0 的 Liquid Glass 全局风格**整体回滚**（`git revert`）。理由：你要的是打磨 Material 3，\n而那套玻璃改动面大、收益不成比例。相关文件（`ui_style.dart` / `glass.dart` /\n`app_backdrop.dart` / `app_card.dart`）已删除，设置项也移除了。\n\n### 文稿：时间偏移微调\n同演播、不同平台，**片头长度可能差几秒**（有的带台标、有的直接进正文），\n所以字幕时间轴会「快几秒或慢几秒」。\n\n新增：文稿页 → `⇅` 按钮 → 滑块 **-15s ~ +15s（0.5s 一档）**\n- 字幕**快了** → 往右推\n- 字幕**慢了** → 往左拉\n- 有「复位」\n- 按「书 + 演播」记住，下次打开自动应用\n- **播放页的内嵌文稿也一起应用**（两边不会错位）\n\n### 文稿：可以随时换候选\n之前配对一个后，空态消失、就没入口再换了。现在文稿页顶部加了 `⇄` 按钮，\n**已配对也能重新进入候选列表**，换到满意的为止。\n\n### 修复：已匹配但播放页不显示\n根因是全屏文稿页和播放页**各拉各的**，全屏页选了候选后播放页不知道。\n\n新增 `LyricsMatcher.revision`（`ValueNotifier`）：\n- 记住/忘记匹配、改偏移时 +1\n- 播放页监听它 → 强制重拉当前章字幕（绕过章节节流）\n\n现在全屏页换完候选，**返回播放页立刻就能看到内嵌文稿**。\n\n### 视觉：去掉播放控制下方的横线\n参考 Melora：工具条靠间距和图标本身就能分组，加线反而显重。",
+  "sha256": "6aa2a600b0f37695cfaac465f1e365162a8c907bab94c840c6d0a28f86934382",
   "size": 31098591,
-  "publishedAt": "2026-11-20T12:23:55Z",
+  "publishedAt": "2026-11-20T12:32:16Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.33.2/tingshu-1.33.2-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.35.0/tingshu-1.35.0-arm64.apk"
   ]
 }
