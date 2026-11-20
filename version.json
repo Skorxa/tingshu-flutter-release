@@ -1,12 +1,12 @@
 {
-  "versionName": "1.28.0",
-  "versionCode": 12800,
+  "versionName": "1.28.1",
+  "versionCode": 12801,
   "force": false,
-  "changelog": "### 新增：LX 音源（独立模块）\n设置 → 音源与内容 → **LX 音源**（与喜马拉雅/唔语同级），可导入 LX Music 2.x 规范的脚本。\n\n**它解决什么问题**：LX 脚本对网络平台只能解析音频地址（`actions: ['musicUrl']`），\n不能搜索、不能取目录。橘听按脚本声明的平台**自动补上目录能力**，所以导入即可用：\n\n```\n用户脚本(声明 kw/tx/kg)  →  橘听补搜索/目录/文稿  →  播放走脚本解析\n```\n\n| 能力 | 谁提供 |\n|---|---|\n| 搜索 / 目录 / 文稿 | 橘听（`book_adapters.js`，三家听书接口）|\n| 音频解析 | 用户导入的 LX 脚本 |\n\n界面会如实标注：`可搜索：kw`、`仅能解析：kg/tx/mg/qs/wy`。\n\n### 新增：三家听书适配器\n| 平台 | 搜索 | 目录 | 文稿 |\n|---|---|---|---|\n| 酷我 | `show_series_listen=1` 过滤长音频 | `album/albumInfo` | `songinfoandlrc` |\n| QQ | 按 `song_count` 筛听书 | `GetAlbumSongList` | `fcg_query_lyric_new` |\n| 酷狗 | 按 `songcount` 筛听书 | `album/song` | `lyrics.kugou.com` 两步 |\n\n章节会按集号重排（QQ/酷狗返回的顺序是乱的），主题曲/片花沉底。\n\n### 新增：逐句文稿\n播放页右上角加「文稿」按钮，半屏面板：\n- 当前句高亮 + 自动滚动跟随\n- 手动滚动后暂停 3 秒再恢复跟随\n- 点某句跳到对应时间\n- 无字幕时显示空态（不是报错）\n\n数据来自音源的 `getLyrics(chapterId)`（新增可选契约字段），\n酷我/QQ/酷狗的有声剧带 AI 字幕（首行是「本字幕由TME AI技术生成」），\n喜马拉雅的内容没有。\n\n### 实测（国内机器）\n- 导入聆澜音源 → 搜《大奉打更人》→ 2653 集目录 → 第 1 集 280 行文稿 → 解析出 CDN 地址\n- 三家文稿命中：酷我 3/8、QQ 175 行、酷狗 280 行\n\n### 已知限制\n- LX 脚本只支持 `kw`/`tx`/`kg` 三个平台的目录；`wy`/`mg`/`qs` 可以解析但搜不到书\n- QQ 接口偶发返回空（实测 3 次里 1 次正常），酷我/酷狗稳定\n- 文稿只对有 AI 字幕的书有效",
-  "sha256": "6a45fc0c98b79cd311d451828fb4220d5057e7483b680b4bcf8cf11550e8a3a4",
-  "size": 31025943,
-  "publishedAt": "2026-11-20T04:39:16Z",
+  "changelog": "### 修复：导入 LX 音源报 `unexpected token 'const'`\n- **根因**：`JsEngine.init()` 只加载了 `uni_shim.js`，**`lx_shim.js` 和\n  `book_adapters.js` 根本没被加载**。于是 `__isLxScript` 不存在，\n  所有脚本都被当成「橘听自有格式」塞进 `return (...)` 里解析 ——\n  而 LX 脚本以 `const` 开头，必然报语法错误。\n- 现在三个垫片按依赖顺序加载（uni → lx → adapters），任一失败都会\n  报出具体是哪个垫片。\n- 顺手加固了格式判别：\n  - **只有**以 `({` 或 `{` 开头的才当橘听音源对象；\n  - 含 `EVENT_NAMES`/`inited`/`sources:`/`lx.` 的一律按 LX 处理；\n  - 其它情况交给 LX 分支，报「脚本未按 LX 协议初始化」而不是语法错误\n    （更好懂）。\n- `__isLxScript` 也放宽了：支持 `const { send } = globalThis.lx` 这种解构写法。\n\n### 验证\n```\n三个垫片加载完成\n  LX 脚本加载 OK: id=lx_c069731c 平台=kg,kw,tx\n  橘听格式仍 OK: t1\n```",
+  "sha256": "d73a9f1a4b156b24396e7fe41380d6b73e555c0093d6661059a87bfabc3859a1",
+  "size": 31026511,
+  "publishedAt": "2026-11-20T04:57:38Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.28.0/tingshu-1.28.0-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.28.1/tingshu-1.28.1-arm64.apk"
   ]
 }
