@@ -1,12 +1,12 @@
 {
-  "versionName": "1.29.1",
-  "versionCode": 12901,
+  "versionName": "1.29.2",
+  "versionCode": 12902,
   "force": false,
-  "changelog": "### 视觉：吸收 Melora 的两个主题细节\n研究了下 Melora（Jetpack Compose）的配色，它用的是 **Material 3 基础色 + 一套自定义语义调色板**：\n\n```kotlin\nMeloraBlue     #3567E8   // 品牌蓝，注释写「取自 Web 端 --blue，保证跨端一致」\ncanvas         #F4F5F7 / #000000\ncard           #FFFFFF / #191C23\nbrand          #2563EB / #6E9BFF\n// 现代化极简卡片微描边：替代发脏的不对称单向阴影，四边完全均匀细腻\ncardBorder     #0D000000 / #282F3B  (0.6dp)\n```\n\n橘听本来就是**动态取色**（从封面提取多色生成 ColorScheme），配色能力比它更强，所以只吸收了两个细节：\n\n**① 卡片加 0.6dp 极淡描边**\n\n阴影在深色下会发脏、且四边不均；描边四边均匀，卡片边界更清晰。\n浅色用 5% 黑、深色用 `#282F3B`。\n\n**② 深色画布压到接近纯黑**\n\n`fromSeed` 生成的 `surface` 是中灰，整屏发灰、OLED 也不省电。\n现在深色下 `surface = #0B0B0F`、`surfaceContainerLowest = #070709`，\n卡片（`surfaceContainerLow`）自然比画布亮一档，层次更清楚。",
-  "sha256": "b5ae4810fcfb71a024e734367ade88857b60c6314cf2cf2135f154df0e7997ad",
-  "size": 31027883,
-  "publishedAt": "2026-11-20T05:45:44Z",
+  "changelog": "### 借文稿：加演播者匹配 + 封面\n之前只比书名，容易借到「不同演播」的版本（时间轴对不上）。现在：\n\n- **书名**必须相似（归一化后相同，或一方包含另一方且长度差 ≤4）\n- **演播者**算相似度 0~1：\n  - 完全一致 → 1.0\n  - 一方包含另一方 → 0.85\n  - 多人串（`A、B、C`）按分隔符拆开算覆盖率\n  - 双方都没填 → 0.5（中性，不扣分）\n- 排序：**演播者相似优先**，其次集数接近\n- 候选列表显示**封面图**（有些书跨平台封面一致，能一眼确认）\n- 演播者高度一致时标注「演播者一致，时间轴最可能对得上」\n\n`PlayerService` 新增 `bookAuthor` 字段，从目录页播放时带过来。\n\n### 修复：LX 解析出的音频地址缺请求头\n日志里播放 QQ 的书报 `(0) Source error`。原因是聆澜只返回一个 URL 字符串，\n而 QQ/酷狗的 CDN 校验 Referer/UA。现在按平台补默认请求头：\n\n| 平台 | 补的 header |\n|---|---|\n| kw | `User-Agent: okhttp/4.9.0` |\n| tx | `User-Agent: <PC>`, `Referer: https://y.qq.com/` |\n| kg | `User-Agent: <PC>` |\n\n脚本自己给了 headers 就合并（脚本优先）。\n\n### 搜索：QQ 改用移动版接口 + 失败重试\n研究 Q-music 的搜索实现，学到两点：\n\n1. 它用的是 **`DoSearchForQQMusicMobile`**（移动版），不是 Desktop 版。\n   QQ 对 Desktop 版限制更严（我们实测经常整段返回空）。\n2. 参数必须完整：`searchid` / `highlight` / `nqc_flag` / `multi_zhida` /\n   `cat` / `grp` / `sin` / `sem`，少一个都可能被判无效。\n\n现在 QQ 搜索：\n- 改走 Mobile 版接口，参数补齐\n- **失败或返回空时自动重试一次**（QQ 会偶发返回空，重试大多能出）\n\n### 改进：QQ 目录顺序\n`GetAlbumSongList` 的 `order` 参数从 `1` 改成 `0`（实测 `order=1` 时返回的\n集号是乱的：2536/2539/2540/2531）。另外第 1 页如果集号不从 1 开始会打一条\n诊断日志，方便判断是服务端排序问题还是本地排序问题。\n\n### 降噪\n源没实现 `getLyrics` 时（如唔语源）不再每次切章都记一条 INFO，\n否则日志被「取文稿失败或源不支持」刷满。",
+  "sha256": "b9e957a9fdf1729cd998ea00e57752275d8702bc494543fe5cd7388df74dc2f4",
+  "size": 31028991,
+  "publishedAt": "2026-11-20T05:58:36Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.29.1/tingshu-1.29.1-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.29.2/tingshu-1.29.2-arm64.apk"
   ]
 }
