@@ -1,12 +1,12 @@
 {
-  "versionName": "1.38.3",
-  "versionCode": 13803,
+  "versionName": "1.38.4",
+  "versionCode": 13804,
   "force": false,
-  "changelog": "### 修复：B 站源目录 412 风控\n字幕兜底生效了（日志里已经能看到 `[Bili] 兜底取到字幕`），但目录又卡住了：\n\n```\n[CatalogPager] 目录第 1 页加载失败\nException: HTTP 412 | api.bilibili.com/x/web-interface/view/detail?aid=&bvid=BV1XenF6rE6t\n```\n\n**412** 是 B 站风控拒绝。`eprendre-bilibili` 自己发的请求（UA/Cookie/Referer 组合）\n没有内置 B 站客户端那套完整（buvid 激活 + WBI + 风控兜底），所以被拦。\n\n**改法：跟字幕一样的兜底**\n\n```\nJS 源 getChapters 抛错\n  → 从 bookId 抠 bvid（正则 BV[0-9A-Za-z]{10}）\n  → BiliApi.detail(bvid) 拉分P\n  → 构造 CatalogResult\n```\n\n**关键细节**：兜底产生的 `chapterId` **仍按 B 站源的 JSON 格式**构造：\n\n```json\n{\"bvid\":\"BV1nZ421Y7tw\",\"cid\":1503046095,\"page\":1}\n```\n\n这样 `eprendre` 的 `getAudioUrl` 能正常解析（播放不受影响），\n字幕兜底也能从同一个 JSON 里抠出 bvid/cid。**三个环节用同一份 id 格式**。\n\n### 现在的 B 站能力矩阵\n\n| 环节 | 内置 B 站 | 已导入的 JS B 站源 |\n|---|---|---|\n| 搜索 | ✅ | ✅（源自己） |\n| 目录 | ✅ | ✅（412 时兜底） |\n| 播放 | ✅ | ✅（源自己，含嗅探） |\n| **文稿** | ✅ | ✅（兜底） |",
-  "sha256": "3f3cde65c18362fbea178ce69ac79aabf68d3c9067a30679d2e228c31dacb0bb",
-  "size": 31100575,
-  "publishedAt": "2026-11-20T16:08:51Z",
+  "changelog": "### 新增：喜马 AI 文稿（需要登录）\n按你给的 XMPlus 源码找到接口了：\n\n```dart\nGET https://www.ximalaya.com/revision/track/simple?trackId={id}\n  → data.trackInfo.lyric   （优先，可能带时间戳）\n  → data.trackInfo.draft   （兜底，通常是纯文本）\n```\n\n**关键差异**：XMPlus 用的是 `account: false`（公开读取），我照它测了 15 集**全是空的**。\n你提到「App 里能看到 AI 文稿」——那部分是**登录后**才有的数据。\n所以橘听这边用 `accountAvailable` 做门槛，**带上你的登录态**去请求。\n\n**顺手加的：纯文本阅读模式**\n\n喜马文稿很多时候是整段纯文本（没有 `[mm:ss]` 时间戳），LRC 解析会得到空结果。\n早先的逻辑会把它当成「没有文稿」然后去走借文稿 —— 反而把已有内容覆盖了。\n\n现在分开了：\n\n| 情况 | 表现 |\n|---|---|\n| 有 LRC 时间轴 | 逐句高亮 + 跟随（原样） |\n| 有内容但无时间轴 | **纯文本阅读模式**（顶部提示「这份文稿没有时间轴，只能阅读」） |\n| 完全没内容 | 走「借文稿」 |\n\n借文稿的触发条件也收紧了：必须 `raw` 完全为空才借，不会覆盖纯文本文稿。\n\n### 需要你验证\n我**没有喜马登录凭证**，所以这条路只能你测：\n\n播放一本**App 里文稿页签有内容**的书 → 打开文稿 → 看日志里有没有：\n\n```\n[Xmly] 取到 AI 文稿\ntrackId: xxx\n长度: N\n带时间戳: true/false\n```\n\n- **有这条** → 说明登录态生效了，接着看 `带时间戳` 是 true 还是 false（决定是逐句跟随还是纯文本阅读）\n- **没有这条** → 说明接口没返回内容，日志里会有 `[Xmly] 取文稿失败` 或干脆没调用",
+  "sha256": "946d84c0af3096bc0b57304732d7b1020220d7b8d9b39081d26053404d3c83f3",
+  "size": 31100663,
+  "publishedAt": "2026-11-21T02:45:39Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.38.3/tingshu-1.38.3-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.38.4/tingshu-1.38.4-arm64.apk"
   ]
 }
