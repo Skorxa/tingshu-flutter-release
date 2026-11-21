@@ -1,12 +1,12 @@
 {
-  "versionName": "1.41.6",
-  "versionCode": 14106,
+  "versionName": "1.41.7",
+  "versionCode": 14107,
   "force": false,
-  "changelog": "### 卡顿与发烫的真因：转写任务并发\n日志里 `开始本地转写` 出现了 **17 次**。\n\n自动缓存一次会下 30 集，每集下完就触发一次预转；17 个转写任务\n同时在跑，每个还带 2 个 ONNX 线程，CPU 基本没停过 —— 播放页卡、\n手机发热都是它。\n\n三处改动：\n\n1. **转写全局串行**：同一时刻只跑一个，其余排队，不再互相抢 CPU\n2. **预转只做下一集**：缓存下完的其它集不再顺手转，等你真播到再转\n3. 排队中的任务显示「排队中」，不会看着像卡死\n\n### 撤回对 NPU 的错误结论\n之前说 NNAPI 会导致碎片乱码，是错的 —— 乱码真因是 **HE-AAC 采样率**\n（1.41.5 已修）。NPU 开关恢复中性描述：对当前小模型没有明显加速，\n部分机型更慢更热，建议关着。",
-  "sha256": "b8ed401764fee87755d1ffce8ab8054c61e2d8882a47330bdb6ceaba9e97734c",
-  "size": 57154935,
-  "publishedAt": "2026-11-21T11:08:28Z",
+  "changelog": "### 移除 NPU 加速\n按要求去掉。实测这条路对当前模型没有收益：NNAPI 是抽象层不是直通 NPU，\n算子支持有限会把计算图切碎，每段都要在 CPU 和 NPU 之间拷贝张量；\n而且包里的 onnxruntime **没有 QNN 执行器**，真正的骁龙 NPU 模型根本跑不了。\n用 QNN 需要另外下 QNN SDK 重新编译运行时，还要赌 SM8845 能加载 SM8850\n编译出来的 `libmodel.so`，性价比太低。\n\n### 准确性：实测三个模型，现用的最好\n同一集真实音频（鸣龙 第001集 深山老陵）对比：\n\n| 模型 | 单州北辉山 | 谢敬欢 | 脑子昏昏沉沉 |\n|---|---|---|---|\n| **现用 CTC 2025-04（26MB）** | ✅ 单州北辉山 | ✅ 谢敬欢 | ✅ 完整 |\n| transducer 14M 2023 | ❌ 单周北自徽山 | ❌ 谢尽婚欢 | ✅ |\n| pkufool CTC 2026-06（27.8MB） | ❌ 丹州北子灰山 | ❌ 谢近欢 | ❌ 掉字 |\n\n现用的是这三者里最好的，不换。\n\n### 热词试过，用不了\nsherpa 的上下文偏置**只支持 transducer 模型**，CTC 会直接忽略\n（就是那句 `Only transducer models support contextual biasing`）。\n而 transducer 本身精度反而不如现在的 CTC，所以这条路走不通。\n\n### 想再提高精度，只剩离线大模型\nFunASR-Nano int8（251MB）这类离线模型精度明显更高，\n但体积 10 倍、每集慢 3~5 倍、内存压力大。需要的话可以做成\n「转完再精修」的可选功能，默认不开。\n\n### 卡顿（含 1.41.6）\n转写改成全局串行 + 预转只做下一集。之前一次触发 17 个转写抢 CPU\n导致播放卡顿、手机发烫的问题已修。\n\n### 乱码（含 1.41.5）\nHE-AAC 的容器采样率和解码器实际输出不一致，按容器值重采样会把声音\n拉快一倍。现在改用解码器的真实输出格式，任意采样率都正确。",
+  "sha256": "c694f52ddbd17fb19221e5d778441be9f807e0633866e46e90929d60e5894265",
+  "size": 57154911,
+  "publishedAt": "2026-11-21T11:28:18Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.41.6/tingshu-1.41.6-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.41.7/tingshu-1.41.7-arm64.apk"
   ]
 }
