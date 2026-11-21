@@ -1,12 +1,12 @@
 {
-  "versionName": "1.41.3",
-  "versionCode": 14103,
+  "versionName": "1.41.5",
+  "versionCode": 14105,
   "force": false,
-  "changelog": "### 修复：识别出来是「于且。」「父什。」这种碎片乱码\n不是时间轴漂移，是**切句切碎了**：6 分 42 秒的音频被 VAD 切成大量\n1~5 字的碎片，流式模型对每个碎片只能瞎猜。\n\n原因是这类书开头有配乐/音效，能量起伏不像正常朗读，按「中位数×0.35」\n算出来的静音阈值失效，几乎每两个字就断一次。\n\n两处修改：\n\n1. **最短句长 0.5s → 1.2s**，太碎的段先并到上一句\n2. **切分异常时自动回退**：如果平均每句不到 2 秒（正常朗读一句不会这么短），\n   判定 VAD 失效，直接按**固定 8 秒窗口**切分 —— 宁可句子长，也不要一堆碎片\n\n顺带的好处：句子数从几百降到几十，要建的识别流少了，**卡顿也会明显缓解**。\n\n**已经转过的章节需要清缓存重转**（设置 → 离线转写 → 清除转写记录），\n否则看到的还是旧结果。",
-  "sha256": "824437e2d4435879be1866650d9d1d45498f187434cf0575fdb2c1b319a8f3b0",
-  "size": 57089403,
-  "publishedAt": "2026-11-21T10:21:52Z",
+  "changelog": "### 1.41.4 构建失败修复\n上一版我给 NPU 开关写警告文案时，字符串里混进了真实换行，\nDart 编译直接报 `unterminated string literal`，CI 挂在 analyze 步。\n已修正，功能与 1.41.4 相同：\n\n- **修 HE-AAC 解码采样率**（碎片乱码的真因）\n- 日志新增「解码参数：容器声明 xxxHz · 实际输出 yyyHz / Nch」\n- NPU 开关标红警告",
+  "sha256": "5cf88d81e28e4ea366c2479bf8e801bf49b4d7cced57d388802184d79a53c2ff",
+  "size": 57154983,
+  "publishedAt": "2026-11-21T10:49:27Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.41.3/tingshu-1.41.3-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.41.5/tingshu-1.41.5-arm64.apk"
   ]
 }
