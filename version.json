@@ -1,12 +1,12 @@
 {
-  "versionName": "1.42.0",
-  "versionCode": 14200,
+  "versionName": "1.42.1",
+  "versionCode": 14201,
   "force": false,
-  "changelog": "### 修复：逐字高亮一顿一顿的\n两个原因叠在一起：\n\n1. **播放器的 position 大约 200ms 才更新一次**，直接拿它算进度，\n   高亮就是 200ms 跳一下\n2. **按字符 substring 切分着色**，整字切换，字与字之间没有过渡\n\n改法：\n\n- 用 `Ticker` 在两次 position 更新之间做**线性插值**，60fps 连续推进\n- 当前句改用 **`ShaderMask` 渐变推进 + 边缘羽化**替代逐字切换，\n  边界是「流」过去的，不是「跳」过去的\n- 插值到位后自动停掉 Ticker，暂停时不空转耗电\n\n参考了 Melora 的做法（它是逐词时间戳 + Canvas 逐字裁剪填充 + 羽化）。\n我们的 LRC 只有行级时间，做不了逐词时间戳，但渲染层的平滑可以对齐。",
-  "sha256": "544fa14701c341b41d21e1b62b0f290dbe4b4b274a21f03136de26a781e067a4",
+  "changelog": "### 修复：长句折成两行时，两行一起渐变\n上一版用 `ShaderMask` 的横向渐变推进，那是按**整个文本矩形**从左到右算的，\n所以一句折成两行时，第一行读到一半，第二行同一水平位置也跟着变色了。\n\n改成按**字形位置**推进：用 `TextPainter` 量出每个字的真实矩形，\n前几行整行点亮、当前行按比例点亮，换行、连字、居中/右对齐都正确。\n\n顺带：\n- 只在文本/宽度/字号变化时重新排版，单纯推进进度只重绘，不重建布局",
+  "sha256": "8d9bc5e7000e671fac81db8605c9f724f6fb7c1f5d1b1d8bede838bb5f216815",
   "size": 57154911,
-  "publishedAt": "2026-11-21T13:12:58Z",
+  "publishedAt": "2026-11-21T13:30:15Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.42.0/tingshu-1.42.0-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.42.1/tingshu-1.42.1-arm64.apk"
   ]
 }
