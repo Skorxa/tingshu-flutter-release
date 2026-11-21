@@ -1,12 +1,12 @@
 {
-  "versionName": "1.38.4",
-  "versionCode": 13804,
+  "versionName": "1.39.0",
+  "versionCode": 13900,
   "force": false,
-  "changelog": "### 新增：喜马 AI 文稿（需要登录）\n按你给的 XMPlus 源码找到接口了：\n\n```dart\nGET https://www.ximalaya.com/revision/track/simple?trackId={id}\n  → data.trackInfo.lyric   （优先，可能带时间戳）\n  → data.trackInfo.draft   （兜底，通常是纯文本）\n```\n\n**关键差异**：XMPlus 用的是 `account: false`（公开读取），我照它测了 15 集**全是空的**。\n你提到「App 里能看到 AI 文稿」——那部分是**登录后**才有的数据。\n所以橘听这边用 `accountAvailable` 做门槛，**带上你的登录态**去请求。\n\n**顺手加的：纯文本阅读模式**\n\n喜马文稿很多时候是整段纯文本（没有 `[mm:ss]` 时间戳），LRC 解析会得到空结果。\n早先的逻辑会把它当成「没有文稿」然后去走借文稿 —— 反而把已有内容覆盖了。\n\n现在分开了：\n\n| 情况 | 表现 |\n|---|---|\n| 有 LRC 时间轴 | 逐句高亮 + 跟随（原样） |\n| 有内容但无时间轴 | **纯文本阅读模式**（顶部提示「这份文稿没有时间轴，只能阅读」） |\n| 完全没内容 | 走「借文稿」 |\n\n借文稿的触发条件也收紧了：必须 `raw` 完全为空才借，不会覆盖纯文本文稿。\n\n### 需要你验证\n我**没有喜马登录凭证**，所以这条路只能你测：\n\n播放一本**App 里文稿页签有内容**的书 → 打开文稿 → 看日志里有没有：\n\n```\n[Xmly] 取到 AI 文稿\ntrackId: xxx\n长度: N\n带时间戳: true/false\n```\n\n- **有这条** → 说明登录态生效了，接着看 `带时间戳` 是 true 还是 false（决定是逐句跟随还是纯文本阅读）\n- **没有这条** → 说明接口没返回内容，日志里会有 `[Xmly] 取文稿失败` 或干脆没调用",
-  "sha256": "946d84c0af3096bc0b57304732d7b1020220d7b8d9b39081d26053404d3c83f3",
-  "size": 31100663,
-  "publishedAt": "2026-11-21T02:45:39Z",
+  "changelog": "### 新增：内置离线语音转文稿（手机本地跑，不上传音频）\n文稿页空态多了「本地 AI 转写这一集」：把这一集的音频下载下来，\n用手机本地跑的 sherpa-onnx 中文模型听写成带时间轴的文稿。\n\n**实测**（62 秒音频、274 字）：\n\n| 项 | 结果 |\n|---|---|\n| 正确率 | 272/274 字（错的是同音字，「一件旧」→「一件就」） |\n| 速度 | RTF 0.029 —— 一集 30 分钟约 1 分钟转完 |\n| 模型 | 26MB，首次使用才下载，之后完全离线 |\n\n**为什么做它**：喜马拉雅、独家书这些源没有现成字幕，「借文稿」也借不到。\n这条路不依赖任何音源，只要能拿到音频就能出文稿。\n\n**流程**\n\n1. 下载音频 → Android 系统解码器（MediaCodec）解成 16k 单声道 PCM\n2. 按 20ms 帧算能量做 VAD 找句子边界（边界取**静音段中点**）\n3. 每句单独送进流式 Zipformer2-CTC 模型，句尾补 1 秒静音\n4. 规则补标点（每 9~16 字在虚词后断逗号），按句高亮跟随\n\n**参数都是踩坑踩出来的**\n\n- 句尾静音补 0.5 秒时，每句都丢最后一个字；补到 1 秒才对\n- 句首不能额外前扩：静音中点前只有 150ms 余量，前扩 0.25s 会把上一句尾字重复识别一遍\n- BBPE token 还原不了（不是 GPT-2 那套字节表，`Ƌ`=U+018B 超出映射范围），\n  所以改用「VAD 切句 + 逐句识别」拿精确时间，绕过 token 反解\n\n**已知限制**\n\n- 需要下载完整音频；HLS 分片（`.m3u8`）和要网页嗅探的音源暂不支持\n- 转写时请留在前台，30 分钟一集约 1 分钟\n- 安装包体积 +28MB（sherpa-onnx 的 onnxruntime 原生库），只打 arm64",
+  "sha256": "fe0a8f1cefb1ce2db059982621d704b462ffb0e71886d87b614560515453e260",
+  "size": 57023511,
+  "publishedAt": "2026-11-21T08:37:30Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.38.4/tingshu-1.38.4-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.39.0/tingshu-1.39.0-arm64.apk"
   ]
 }
