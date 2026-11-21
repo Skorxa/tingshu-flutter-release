@@ -1,12 +1,12 @@
 {
-  "versionName": "1.41.7",
-  "versionCode": 14107,
+  "versionName": "1.41.8",
+  "versionCode": 14108,
   "force": false,
-  "changelog": "### 移除 NPU 加速\n按要求去掉。实测这条路对当前模型没有收益：NNAPI 是抽象层不是直通 NPU，\n算子支持有限会把计算图切碎，每段都要在 CPU 和 NPU 之间拷贝张量；\n而且包里的 onnxruntime **没有 QNN 执行器**，真正的骁龙 NPU 模型根本跑不了。\n用 QNN 需要另外下 QNN SDK 重新编译运行时，还要赌 SM8845 能加载 SM8850\n编译出来的 `libmodel.so`，性价比太低。\n\n### 准确性：实测三个模型，现用的最好\n同一集真实音频（鸣龙 第001集 深山老陵）对比：\n\n| 模型 | 单州北辉山 | 谢敬欢 | 脑子昏昏沉沉 |\n|---|---|---|---|\n| **现用 CTC 2025-04（26MB）** | ✅ 单州北辉山 | ✅ 谢敬欢 | ✅ 完整 |\n| transducer 14M 2023 | ❌ 单周北自徽山 | ❌ 谢尽婚欢 | ✅ |\n| pkufool CTC 2026-06（27.8MB） | ❌ 丹州北子灰山 | ❌ 谢近欢 | ❌ 掉字 |\n\n现用的是这三者里最好的，不换。\n\n### 热词试过，用不了\nsherpa 的上下文偏置**只支持 transducer 模型**，CTC 会直接忽略\n（就是那句 `Only transducer models support contextual biasing`）。\n而 transducer 本身精度反而不如现在的 CTC，所以这条路走不通。\n\n### 想再提高精度，只剩离线大模型\nFunASR-Nano int8（251MB）这类离线模型精度明显更高，\n但体积 10 倍、每集慢 3~5 倍、内存压力大。需要的话可以做成\n「转完再精修」的可选功能，默认不开。\n\n### 卡顿（含 1.41.6）\n转写改成全局串行 + 预转只做下一集。之前一次触发 17 个转写抢 CPU\n导致播放卡顿、手机发烫的问题已修。\n\n### 乱码（含 1.41.5）\nHE-AAC 的容器采样率和解码器实际输出不一致，按容器值重采样会把声音\n拉快一倍。现在改用解码器的真实输出格式，任意采样率都正确。",
-  "sha256": "c694f52ddbd17fb19221e5d778441be9f807e0633866e46e90929d60e5894265",
+  "changelog": "### 继续压卡顿：降低 CPU 峰值\n1.41.6 修掉了「17 个转写同时跑」，如果装了之后还是卡，剩下的原因是\n**解码的瞬时满载**和**识别过程的持续满载**。\n\n三处调整（代价是转写略慢，换播放流畅）：\n\n1. **解码线程降到最低优先级**：原来只是「后台」，现在是最低\n2. **解码每 16 个缓冲让出 1ms**：解码 400 秒音频要连续跑好几秒，\n   一口气跑完会让播放页掉帧\n3. **识别每句后让出 1ms**：逐句推理是连续满载，让出后不再成片掉帧\n   （一集 130 句，总共只多 0.13 秒）\n\n### 如果还卡，我需要这两行日志\n设置 → 离线转写 → 诊断 → 转写日志：\n\n- `开始本地转写` 出现几次 —— 正常应该只有 1 个在跑，其余显示「排队中」\n- `识别中 ... 平均 xxx ms/句` —— 超过 300ms 说明 CPU 确实不够",
+  "sha256": "e2cbbae5bb22a1193bafcc6e6e528ba3a688ca27b0d4976c6fb413dc7ff9f331",
   "size": 57154911,
-  "publishedAt": "2026-11-21T11:28:18Z",
+  "publishedAt": "2026-11-21T12:21:28Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.41.7/tingshu-1.41.7-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.41.8/tingshu-1.41.8-arm64.apk"
   ]
 }
