@@ -1,12 +1,12 @@
 {
-  "versionName": "1.41.5",
-  "versionCode": 14105,
+  "versionName": "1.41.6",
+  "versionCode": 14106,
   "force": false,
-  "changelog": "### 1.41.4 构建失败修复\n上一版我给 NPU 开关写警告文案时，字符串里混进了真实换行，\nDart 编译直接报 `unterminated string literal`，CI 挂在 analyze 步。\n已修正，功能与 1.41.4 相同：\n\n- **修 HE-AAC 解码采样率**（碎片乱码的真因）\n- 日志新增「解码参数：容器声明 xxxHz · 实际输出 yyyHz / Nch」\n- NPU 开关标红警告",
-  "sha256": "5cf88d81e28e4ea366c2479bf8e801bf49b4d7cced57d388802184d79a53c2ff",
-  "size": 57154983,
-  "publishedAt": "2026-11-21T10:49:27Z",
+  "changelog": "### 卡顿与发烫的真因：转写任务并发\n日志里 `开始本地转写` 出现了 **17 次**。\n\n自动缓存一次会下 30 集，每集下完就触发一次预转；17 个转写任务\n同时在跑，每个还带 2 个 ONNX 线程，CPU 基本没停过 —— 播放页卡、\n手机发热都是它。\n\n三处改动：\n\n1. **转写全局串行**：同一时刻只跑一个，其余排队，不再互相抢 CPU\n2. **预转只做下一集**：缓存下完的其它集不再顺手转，等你真播到再转\n3. 排队中的任务显示「排队中」，不会看着像卡死\n\n### 撤回对 NPU 的错误结论\n之前说 NNAPI 会导致碎片乱码，是错的 —— 乱码真因是 **HE-AAC 采样率**\n（1.41.5 已修）。NPU 开关恢复中性描述：对当前小模型没有明显加速，\n部分机型更慢更热，建议关着。",
+  "sha256": "b8ed401764fee87755d1ffce8ab8054c61e2d8882a47330bdb6ceaba9e97734c",
+  "size": 57154935,
+  "publishedAt": "2026-11-21T11:08:28Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.41.5/tingshu-1.41.5-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.41.6/tingshu-1.41.6-arm64.apk"
   ]
 }
