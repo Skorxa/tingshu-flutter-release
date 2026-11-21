@@ -1,12 +1,12 @@
 {
-  "versionName": "1.42.1",
-  "versionCode": 14201,
+  "versionName": "1.42.2",
+  "versionCode": 14202,
   "force": false,
-  "changelog": "### 修复：长句折成两行时，两行一起渐变\n上一版用 `ShaderMask` 的横向渐变推进，那是按**整个文本矩形**从左到右算的，\n所以一句折成两行时，第一行读到一半，第二行同一水平位置也跟着变色了。\n\n改成按**字形位置**推进：用 `TextPainter` 量出每个字的真实矩形，\n前几行整行点亮、当前行按比例点亮，换行、连字、居中/右对齐都正确。\n\n顺带：\n- 只在文本/宽度/字号变化时重新排版，单纯推进进度只重绘，不重建布局",
-  "sha256": "8d9bc5e7000e671fac81db8605c9f724f6fb7c1f5d1b1d8bede838bb5f216815",
+  "changelog": "### 修复：进文稿页 / 拖动进度条后，定位不到正在播的那句\n这是我上一版引入的回归。\n\n**根因**：`ListView.builder` 是懒加载的，视口外的行根本没被构建。\n之前用 `Scrollable.ensureVisible` 跳转，需要目标行的 `context`——\n目标行没构建时 `context` 是 `null`，滚动就静默失败了。\n（更早用固定行高 `animateTo` 时不依赖 context，所以没暴露。）\n\n**改法**：让每行高度可预知，用累计高度直接算滚动偏移。\n\n1. **「近大远小」改用整体缩放实现**（`Transform.scale`），不再改 `fontSize`。\n   改字号会让每行高度都不同，滚动位置就根本算不准；\n   整体缩放只影响视觉、不改布局占位，两全。\n   「近实远虚」保留原有透明度 + 模糊，且模糊作用在缩放之后。\n2. 打开文稿时用 `TextPainter` 预算每行的精确高度（含停顿间距），\n   配 `itemExtentBuilder` 让 ListView 知道每行多高\n3. 跳转改为「累计高度 - 视口 45%」，不再依赖目标行是否已构建\n\n顺带：拖动进度条、切集、点「回到当前句」现在都能准确定位。",
+  "sha256": "8d71b588dafd900c1f6dca1fa66027a216078541488697fa34bc1ac1446ac659",
   "size": 57154911,
-  "publishedAt": "2026-11-21T13:30:15Z",
+  "publishedAt": "2026-11-21T14:06:21Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.42.1/tingshu-1.42.1-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.42.2/tingshu-1.42.2-arm64.apk"
   ]
 }
