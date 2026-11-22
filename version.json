@@ -1,12 +1,12 @@
 {
-  "versionName": "1.42.3",
-  "versionCode": 14203,
+  "versionName": "1.42.4",
+  "versionCode": 14204,
   "force": false,
-  "changelog": "### 修复：混淆过的 LX 源导入报「SyntaxError: expecting '）'」\n你给的两个源（独家音源 / 墨澜聚合）导入失败，根因有两层：\n\n1. **判定没认出是 LX 源**。`__isLxScript` 靠 `lx.`、`send(`、`EVENT_NAMES`\n   这些字面量判断，而混淆器把它们全变成数组索引了（实测 `lx.` 出现 **0 次**），\n   于是当成橘听自有格式去 `new Function('return (…))'` —— 代码是 IIFE 语句不是\n   对象字面量，直接抛那个误导性的全角括号语法错误。\n2. **真正的原因被吞掉了**。native 失败后会回退试 LX，但两个都失败时只抛 native\n   的错误，看不到 LX 那边为什么挂。\n\n改法：\n\n- `__isLxScript` 增加 `SERVER_SCRIPT_CONFIG` 特征（独家音源这类服务端下发配置的脚本）\n- 两边都失败时把 **LX 错误 + 原生错误一起抛**，下次能直接看到真因\n\n用 quickjs 单独验证过：这两个源**都不是语法问题**（阿拉伯字符标识符 quickjs 认得），\n是运行时报错（`cannot read property of undefined` / `cannot convert to object`），\n具体原因等新版导入时的报错信息。",
-  "sha256": "b7a4751ccd93ed6d5af853592cee802bacdd192ba3b30601481684736a43465f",
+  "changelog": "### 修复：音源拖拽排序后自己弹回原样\n根因是**按下标移动，但两个列表的下标不是一回事**。\n\n`getSources()` 会把所有 LX 脚本抽出来合并成末尾的一个「洛雪聚合听书」，\n所以界面列表的顺序是「原生源…＋聚合项」，而内部 `_stored` 是\n「原生源和 LX 脚本交错的真实顺序」。\n\n排序时用的是界面下标去操作 `_stored` —— 一旦两者交错，就会**移错对象**：\n\n```\n_stored = [X(lx), A, B]   界面 = [A, B, lx_pool]\n把 A 拖到末尾：from = 0\n  → 移走的其实是 _stored[0] = X（那个 LX 脚本），A 原地不动\n  → 界面看起来就是「弹回去了」\n```\n\n**改法：按 id 移动，不看下标。**\n\n- 新增 `moveSourceById(id, beforeId:)`：找 id、插到锚点 id 之前（null = 末尾）\n- 拖拽落点改成算「锚点 id」而不是目标下标\n- 与列表怎么聚合无关，LX 交错也不会再移错",
+  "sha256": "781c1fdf807d3437c35a01b13feca345155084b3180380e4c13b0813d7eef6a8",
   "size": 57155203,
-  "publishedAt": "2026-11-22T01:51:30Z",
+  "publishedAt": "2026-11-22T02:11:46Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.42.3/tingshu-1.42.3-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.42.4/tingshu-1.42.4-arm64.apk"
   ]
 }
