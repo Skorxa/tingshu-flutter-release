@@ -1,12 +1,12 @@
 {
-  "versionName": "1.44.3",
-  "versionCode": 14403,
+  "versionName": "1.44.4",
+  "versionCode": 14404,
   "force": false,
-  "changelog": "### 修复：内置喜马源长专辑目录不全（如《剑来广播剧 5-9 季》）\n《剑来广播剧 5-9 季》接口声明 **1061 集 / 6 页**，匿名接口一页 200 条能完整翻到\n第 1061 集（第 9 季 220 集，完结）。但 App 登录态下目录只翻到前面一部分。\n\n根因：登录时目录走的是**签名接口** `/fmobile-album/album/track/ts-*`，它每页\n实际返回的条数比请求的 `pageSize` 少，而 `maxPage` 是按请求的 `pageSize` 算的，\n于是「页数算少了 → 后面几页永远不加载」。\n\n改法（对齐上游 XMPlus）：\n- 目录**永远优先走匿名接口** `/mobile/v1/album/track/v2`；只有匿名首页拿不到数据\n  （个别付费/会员专辑）时才回退签名接口。\n- 服务端页大小与请求不一致时，**按服务端给的页大小重算**，而不是直接判「分页无效」。",
-  "sha256": "aec689839a20f3fcd653555327bd65d19b26e2235e4dc1f3d24c31698e8ccc47",
+  "changelog": "### 修复：升级后喜马长专辑仍显示残缺目录（旧缓存没清）\n1.44.3 修的是「登录态拉目录走签名接口、每页条数偏少」的问题，但**旧的目录缓存\n仍然留在数据库里**，界面优先读缓存 —— 于是《剑来广播剧 5-9 季》升级后还是只有\n第 5 季 2 集。\n\n改动：\n- DB v16：升级时**清空目录缓存**（`catalog_chapters` / `catalog_books`），\n  下次进目录重新拉。目录缓存本来就可重建，不丢任何用户数据。\n- 目录页补埋点：每次拉页会记录「第几页 / 本页多少条 / total / maxPage / 耗时 /\n  首末章节名」，以后「只显示 N 集」这类问题看日志就能分清是源的问题还是界面没翻页。",
+  "sha256": "844eeb797391808b1e99bdd2f2e24e2ac62a801e5f13393db3da14df3a404151",
   "size": 57237531,
-  "publishedAt": "2026-11-22T14:56:52Z",
+  "publishedAt": "2026-11-22T15:33:58Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.44.3/tingshu-1.44.3-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.44.4/tingshu-1.44.4-arm64.apk"
   ]
 }
