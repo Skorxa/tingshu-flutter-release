@@ -1,12 +1,12 @@
 {
-  "versionName": "1.44.1",
-  "versionCode": 14401,
+  "versionName": "1.44.2",
+  "versionCode": 14402,
   "force": false,
-  "changelog": "### 修复：发现页分类没出现（音源升级后能力标记还是旧的）\n`supportsChannels` 是**导入音源那一刻**由 JS 引擎回报的能力快照。音源在云端升级到\nv3（新增 `discoverChannels`）之后，如果本地没有重新导入，这个标记仍是 false，\n发现页就继续按「一次性多段」渲染 —— 看起来就是「什么都没变」。\n\n改法：不再硬依赖这个标记。只要源支持 `discover`，就先按频道（平台 → 分类）试一次；\n源头确实没实现 `discoverChannels` 时再退回一次性多段，并记住这个源，避免反复失败。",
-  "sha256": "741ae612c02978fa19bb025b7bc03a8727e1a34354ca360645f8ff29dff1cc9c",
+  "changelog": "### 修复：发现页停在「该音源不支持分类」\n1.44.1 只把**界面**对 `supportsChannels` 的依赖去掉了，**管理端**\n`discoverChannelsFromSource()` 里还留着 `if (s['supportsChannels'] != true) throw\nException('该音源不支持分类')`。而这个标记是「导入音源那一刻」的快照，旧条目的值是\nfalse —— 于是界面照旧去问分类，被管理端直接拒绝，停在报错页。\n\n改动：\n- 管理端不再用这个标记拦人，直接调 JS；源没实现时引擎抛「音源无方法」，\n  界面据此**退回原来的多段布局**（不会白屏、不会卡在报错页）。\n- 拉分类失败也补上了回退（以前只有「拉某个分类内容」失败才回退）。\n- 平台 chips 兜底：旧 meta 没有 `discoverFilters` 时，从频道标题\n  （`番茄 · 听书榜`）里推导平台名，保证平台排能显示。",
+  "sha256": "c49dda00fc0234cdd2ffe7f4100c550ff8cc7746d6d65bfec6c2d5943dd6fde2",
   "size": 57221147,
-  "publishedAt": "2026-11-22T08:39:58Z",
+  "publishedAt": "2026-11-22T09:00:12Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.44.1/tingshu-1.44.1-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.44.2/tingshu-1.44.2-arm64.apk"
   ]
 }
