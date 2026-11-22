@@ -1,12 +1,12 @@
 {
-  "versionName": "1.44.2",
-  "versionCode": 14402,
+  "versionName": "1.44.3",
+  "versionCode": 14403,
   "force": false,
-  "changelog": "### 修复：发现页停在「该音源不支持分类」\n1.44.1 只把**界面**对 `supportsChannels` 的依赖去掉了，**管理端**\n`discoverChannelsFromSource()` 里还留着 `if (s['supportsChannels'] != true) throw\nException('该音源不支持分类')`。而这个标记是「导入音源那一刻」的快照，旧条目的值是\nfalse —— 于是界面照旧去问分类，被管理端直接拒绝，停在报错页。\n\n改动：\n- 管理端不再用这个标记拦人，直接调 JS；源没实现时引擎抛「音源无方法」，\n  界面据此**退回原来的多段布局**（不会白屏、不会卡在报错页）。\n- 拉分类失败也补上了回退（以前只有「拉某个分类内容」失败才回退）。\n- 平台 chips 兜底：旧 meta 没有 `discoverFilters` 时，从频道标题\n  （`番茄 · 听书榜`）里推导平台名，保证平台排能显示。",
-  "sha256": "c49dda00fc0234cdd2ffe7f4100c550ff8cc7746d6d65bfec6c2d5943dd6fde2",
-  "size": 57221147,
-  "publishedAt": "2026-11-22T09:00:12Z",
+  "changelog": "### 修复：内置喜马源长专辑目录不全（如《剑来广播剧 5-9 季》）\n《剑来广播剧 5-9 季》接口声明 **1061 集 / 6 页**，匿名接口一页 200 条能完整翻到\n第 1061 集（第 9 季 220 集，完结）。但 App 登录态下目录只翻到前面一部分。\n\n根因：登录时目录走的是**签名接口** `/fmobile-album/album/track/ts-*`，它每页\n实际返回的条数比请求的 `pageSize` 少，而 `maxPage` 是按请求的 `pageSize` 算的，\n于是「页数算少了 → 后面几页永远不加载」。\n\n改法（对齐上游 XMPlus）：\n- 目录**永远优先走匿名接口** `/mobile/v1/album/track/v2`；只有匿名首页拿不到数据\n  （个别付费/会员专辑）时才回退签名接口。\n- 服务端页大小与请求不一致时，**按服务端给的页大小重算**，而不是直接判「分页无效」。",
+  "sha256": "aec689839a20f3fcd653555327bd65d19b26e2235e4dc1f3d24c31698e8ccc47",
+  "size": 57237531,
+  "publishedAt": "2026-11-22T14:56:52Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.44.2/tingshu-1.44.2-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.44.3/tingshu-1.44.3-arm64.apk"
   ]
 }
