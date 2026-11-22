@@ -1,12 +1,12 @@
 {
-  "versionName": "1.44.0",
-  "versionCode": 14400,
+  "versionName": "1.44.1",
+  "versionCode": 14401,
   "force": false,
-  "changelog": "### 发现页：改成「平台 → 分类」两级，不再一路往下滑\n聚合源现在实现 `discoverChannels()/discoverChannel()`，发现页按内置喜马拉雅的\n频道模型渲染：\n\n- 第一排：平台 chips（全部 / 番茄 / 酷我 / 七猫 / 喜马）\n- 第二排：该平台的分类 chips（**常驻吸顶**，滑到哪都能直接换分类）\n- 正文：只渲染当前分类，下滑自动加载下一页\n\n青天聚合实测有 **474 个分类**（番茄 281 / 酷我 100 / 七猫 48 / 喜马 45），\n所以分类排只显示前 10 个 + 「全部分类」，点开是按平台分组的弹窗，不再把\n几百个分类竖着铺成一条看不懂的长页。\n\n### 修复：发现页中间的「大黑空」\n根因是**每段网格都加了一次底部导航内边距**（`NavBarInset`）：\n\n```\n以前：每段 + 8px + 导航高度   ← 8~12 段就是 700~900px 的空白夹在中间\n现在：只在页脚加一次\n```\n\n同时收紧了段标题间距（10→12/6）和段间距（8→4），卡片区不再被空白撑开。",
-  "sha256": "69ad880be9914556ff61537595e83f937a2701fe3b513d25498299cffe162ef0",
+  "changelog": "### 修复：发现页分类没出现（音源升级后能力标记还是旧的）\n`supportsChannels` 是**导入音源那一刻**由 JS 引擎回报的能力快照。音源在云端升级到\nv3（新增 `discoverChannels`）之后，如果本地没有重新导入，这个标记仍是 false，\n发现页就继续按「一次性多段」渲染 —— 看起来就是「什么都没变」。\n\n改法：不再硬依赖这个标记。只要源支持 `discover`，就先按频道（平台 → 分类）试一次；\n源头确实没实现 `discoverChannels` 时再退回一次性多段，并记住这个源，避免反复失败。",
+  "sha256": "741ae612c02978fa19bb025b7bc03a8727e1a34354ca360645f8ff29dff1cc9c",
   "size": 57221147,
-  "publishedAt": "2026-11-22T08:19:02Z",
+  "publishedAt": "2026-11-22T08:39:58Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.44.0/tingshu-1.44.0-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.44.1/tingshu-1.44.1-arm64.apk"
   ]
 }
