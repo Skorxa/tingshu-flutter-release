@@ -1,12 +1,12 @@
 {
-  "versionName": "1.42.2",
-  "versionCode": 14202,
+  "versionName": "1.42.3",
+  "versionCode": 14203,
   "force": false,
-  "changelog": "### 修复：进文稿页 / 拖动进度条后，定位不到正在播的那句\n这是我上一版引入的回归。\n\n**根因**：`ListView.builder` 是懒加载的，视口外的行根本没被构建。\n之前用 `Scrollable.ensureVisible` 跳转，需要目标行的 `context`——\n目标行没构建时 `context` 是 `null`，滚动就静默失败了。\n（更早用固定行高 `animateTo` 时不依赖 context，所以没暴露。）\n\n**改法**：让每行高度可预知，用累计高度直接算滚动偏移。\n\n1. **「近大远小」改用整体缩放实现**（`Transform.scale`），不再改 `fontSize`。\n   改字号会让每行高度都不同，滚动位置就根本算不准；\n   整体缩放只影响视觉、不改布局占位，两全。\n   「近实远虚」保留原有透明度 + 模糊，且模糊作用在缩放之后。\n2. 打开文稿时用 `TextPainter` 预算每行的精确高度（含停顿间距），\n   配 `itemExtentBuilder` 让 ListView 知道每行多高\n3. 跳转改为「累计高度 - 视口 45%」，不再依赖目标行是否已构建\n\n顺带：拖动进度条、切集、点「回到当前句」现在都能准确定位。",
-  "sha256": "8d71b588dafd900c1f6dca1fa66027a216078541488697fa34bc1ac1446ac659",
-  "size": 57154911,
-  "publishedAt": "2026-11-21T14:06:21Z",
+  "changelog": "### 修复：混淆过的 LX 源导入报「SyntaxError: expecting '）'」\n你给的两个源（独家音源 / 墨澜聚合）导入失败，根因有两层：\n\n1. **判定没认出是 LX 源**。`__isLxScript` 靠 `lx.`、`send(`、`EVENT_NAMES`\n   这些字面量判断，而混淆器把它们全变成数组索引了（实测 `lx.` 出现 **0 次**），\n   于是当成橘听自有格式去 `new Function('return (…))'` —— 代码是 IIFE 语句不是\n   对象字面量，直接抛那个误导性的全角括号语法错误。\n2. **真正的原因被吞掉了**。native 失败后会回退试 LX，但两个都失败时只抛 native\n   的错误，看不到 LX 那边为什么挂。\n\n改法：\n\n- `__isLxScript` 增加 `SERVER_SCRIPT_CONFIG` 特征（独家音源这类服务端下发配置的脚本）\n- 两边都失败时把 **LX 错误 + 原生错误一起抛**，下次能直接看到真因\n\n用 quickjs 单独验证过：这两个源**都不是语法问题**（阿拉伯字符标识符 quickjs 认得），\n是运行时报错（`cannot read property of undefined` / `cannot convert to object`），\n具体原因等新版导入时的报错信息。",
+  "sha256": "b7a4751ccd93ed6d5af853592cee802bacdd192ba3b30601481684736a43465f",
+  "size": 57155203,
+  "publishedAt": "2026-11-22T01:51:30Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.42.2/tingshu-1.42.2-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.42.3/tingshu-1.42.3-arm64.apk"
   ]
 }
