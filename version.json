@@ -1,12 +1,12 @@
 {
-  "versionName": "1.44.4",
-  "versionCode": 14404,
+  "versionName": "1.45.0",
+  "versionCode": 14500,
   "force": false,
-  "changelog": "### 修复：升级后喜马长专辑仍显示残缺目录（旧缓存没清）\n1.44.3 修的是「登录态拉目录走签名接口、每页条数偏少」的问题，但**旧的目录缓存\n仍然留在数据库里**，界面优先读缓存 —— 于是《剑来广播剧 5-9 季》升级后还是只有\n第 5 季 2 集。\n\n改动：\n- DB v16：升级时**清空目录缓存**（`catalog_chapters` / `catalog_books`），\n  下次进目录重新拉。目录缓存本来就可重建，不丢任何用户数据。\n- 目录页补埋点：每次拉页会记录「第几页 / 本页多少条 / total / maxPage / 耗时 /\n  首末章节名」，以后「只显示 N 集」这类问题看日志就能分清是源的问题还是界面没翻页。",
-  "sha256": "844eeb797391808b1e99bdd2f2e24e2ac62a801e5f13393db3da14df3a404151",
-  "size": 57237531,
-  "publishedAt": "2026-11-22T15:33:58Z",
+  "changelog": "### 新增：原生加密原语（AES-ECB 解密 / ECDSA P-256 签名）\nJS 音源多出 3 个原生能力，用来适配需要设备签名或 AES-ECB 的站点：\n\n- `uni.crypto.aesEcbDecrypt`：AES-ECB/PKCS7 解密（key 支持 16/24/32 字节）。\n- `uni.crypto.ecP256Keygen`：生成 P-256 密钥对，返回 `{privateKey, publicKeySpki}`（base64）。\n- `uni.crypto.ecP256Sign`：`SHA256withECDSA` 签名，输出 base64 DER，可直接对接 Java 服务端。\n\nkeypair 只存在于当前 JS 上下文（App 重启/源重载后重新生成）。老音源不受影响；\n新源请用 `typeof uni.crypto.ecP256Keygen === 'function'` 探测，在旧版本 App 上降级。\n\n### 修复：元气听书源会员/付费集不可播\n接上元气网关（`yqts.haitangw.cc`）与官方 playpage 兜底后，付费集也能解析出可播直链：\n\n- 取流顺序：官方 playpage（AES-ECB，最快）→ 元气网关（ECDSA 设备签名 + Bearer）→\n  移动端 track → 免费集的目录直链。\n- 实测《剑来》下等付费专辑：目录无 `playUrl64` 的章节也能 206 播放。\n- 老版本 App 没有新原语，会自动跳过前两条通道，免费集仍按原逻辑播放。",
+  "sha256": "502c45d446a46619354c18f02ac768de461429a8607e8bfc7ae35aa6ee3c7c89",
+  "size": 57303347,
+  "publishedAt": "2026-11-23T12:57:26Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.44.4/tingshu-1.44.4-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.45.0/tingshu-1.45.0-arm64.apk"
   ]
 }
