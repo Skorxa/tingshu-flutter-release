@@ -1,12 +1,12 @@
 {
-  "versionName": "1.45.0",
-  "versionCode": 14500,
+  "versionName": "1.46.0",
+  "versionCode": 14600,
   "force": false,
-  "changelog": "### 新增：原生加密原语（AES-ECB 解密 / ECDSA P-256 签名）\nJS 音源多出 3 个原生能力，用来适配需要设备签名或 AES-ECB 的站点：\n\n- `uni.crypto.aesEcbDecrypt`：AES-ECB/PKCS7 解密（key 支持 16/24/32 字节）。\n- `uni.crypto.ecP256Keygen`：生成 P-256 密钥对，返回 `{privateKey, publicKeySpki}`（base64）。\n- `uni.crypto.ecP256Sign`：`SHA256withECDSA` 签名，输出 base64 DER，可直接对接 Java 服务端。\n\nkeypair 只存在于当前 JS 上下文（App 重启/源重载后重新生成）。老音源不受影响；\n新源请用 `typeof uni.crypto.ecP256Keygen === 'function'` 探测，在旧版本 App 上降级。\n\n### 修复：元气听书源会员/付费集不可播\n接上元气网关（`yqts.haitangw.cc`）与官方 playpage 兜底后，付费集也能解析出可播直链：\n\n- 取流顺序：官方 playpage（AES-ECB，最快）→ 元气网关（ECDSA 设备签名 + Bearer）→\n  移动端 track → 免费集的目录直链。\n- 实测《剑来》下等付费专辑：目录无 `playUrl64` 的章节也能 206 播放。\n- 老版本 App 没有新原语，会自动跳过前两条通道，免费集仍按原逻辑播放。",
-  "sha256": "502c45d446a46619354c18f02ac768de461429a8607e8bfc7ae35aa6ee3c7c89",
-  "size": 57303347,
-  "publishedAt": "2026-11-23T12:57:26Z",
+  "changelog": "### 新增：宽屏自适应（平板 / 横屏）\n- **宽 >= 600dp 时左侧导航**：底部 dock 换成 `NavigationRail`，迷你播放器移到内容区底部；\n  手机竖屏保持原来的底部导航和三种样式。\n- **播放页对开**：宽 >= 720dp 且高 >= 480dp 时，左封面、右文稿同屏显示；手机横屏等矮屏\n  仍用原来的左右滑页。\n- 断点集中在 `lib/ui/breakpoints.dart`，按可用宽度判断，分屏/折叠屏同样生效。\n- 旋转或拖动分屏跨断点时，页签、播放章节和页面滚动位置保持不变（页面用 GlobalKey 保状态）。",
+  "sha256": "30a3137029073aea6ced453da5a0d39d0c6e438286d577ce82290a6eb4ec7e57",
+  "size": 57368883,
+  "publishedAt": "2026-11-24T11:56:39Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.45.0/tingshu-1.45.0-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.46.0/tingshu-1.46.0-arm64.apk"
   ]
 }
