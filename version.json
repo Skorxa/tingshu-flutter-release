@@ -1,12 +1,12 @@
 {
-  "versionName": "1.46.0",
-  "versionCode": 14600,
+  "versionName": "1.46.1",
+  "versionCode": 14601,
   "force": false,
-  "changelog": "### 新增：宽屏自适应（平板 / 横屏）\n- **宽 >= 600dp 时左侧导航**：底部 dock 换成 `NavigationRail`，迷你播放器移到内容区底部；\n  手机竖屏保持原来的底部导航和三种样式。\n- **播放页对开**：宽 >= 720dp 且高 >= 480dp 时，左封面、右文稿同屏显示；手机横屏等矮屏\n  仍用原来的左右滑页。\n- 断点集中在 `lib/ui/breakpoints.dart`，按可用宽度判断，分屏/折叠屏同样生效。\n- 旋转或拖动分屏跨断点时，页签、播放章节和页面滚动位置保持不变（页面用 GlobalKey 保状态）。",
-  "sha256": "30a3137029073aea6ced453da5a0d39d0c6e438286d577ce82290a6eb4ec7e57",
-  "size": 57368883,
-  "publishedAt": "2026-11-24T11:56:39Z",
+  "changelog": "### 修复：懒人「简介长图」被切成多张、显示不完整\n懒人听书的 `introRich` 把一张长海报切成多张 950×500 的竖条（常见 6–10 张），\n原来在简介面板里逐张显示，每张之间还有间距和圆角，看起来像被截断。\n\n改动：\n- `IntroContent` 新增 `imageGroups`：中间没有可见文字的连续图片归为一组；\n- 简介面板对多张一组的切片先竖向拼成一张 PNG 再显示（`IntroPosterMerger`），\n  点击进入全屏后可整体缩放；\n- 拼接失败（宽度不一致/下载失败/过长）自动退化为「无间距竖排」，不再出现断裂感；\n- 新增分组解析单测。",
+  "sha256": "59c2dcb09008df64172235f3c5acf9308615c35bffac3b3bada02257fd08ea8b",
+  "size": 57434419,
+  "publishedAt": "2026-11-26T02:48:47Z",
   "urls": [
-    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.46.0/tingshu-1.46.0-arm64.apk"
+    "https://github.com/Skorxa/tingshu-flutter-release/releases/download/v1.46.1/tingshu-1.46.1-arm64.apk"
   ]
 }
